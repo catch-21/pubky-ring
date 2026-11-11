@@ -187,8 +187,8 @@ describe('parsePubkyAuthLink', () => {
 			clientId: RP_ID,
 			relay: 'https://httprelay.staging.pubky.app/inbox',
 			approvalFormat: 'v1',
-			ephemeralPublicKey: 'kgq7x5r3cqh8sdi4bopp7xa1kbtxwkmbh8xbxfndy5b9f9wq3g3o',
-			clientPublicKey: '8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo',
+			ephemeralPublicKey: 'kN-sSW2BOQClhwV8qF4DVOq9xrQHJvhvF-zU_W-KbTQ',
+			clientPublicKey: 'qdw49yskax4cd33s85ojn45qom1hb7unn77d1eou3shnnjd95phy',
 			hasSecret: false,
 			expectedSigner: undefined,
 		});

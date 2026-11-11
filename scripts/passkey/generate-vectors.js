@@ -15,8 +15,8 @@ const RP_ID = 'pubky-ring-demo.vercel.app';
 const PUBKY = 'o1gg96ewuojmopcjbz8895478wdtxtzzuxnfjjz8o8e77csa1ngo';
 const URL =
 	'pubkyauth://signin_grant?caps=%2Fpub%2Fpubky.app%2F%3Arw&relay=https%3A%2F%2Fhttprelay.staging.pubky.app%2Finbox' +
-	`&cid=${RP_ID}&cpk=8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo&af=v1` +
-	'&epk=kgq7x5r3cqh8sdi4bopp7xa1kbtxwkmbh8xbxfndy5b9f9wq3g3o';
+	`&cid=${RP_ID}&cpk=qdw49yskax4cd33s85ojn45qom1hb7unn77d1eou3shnnjd95phy&af=v1` +
+	'&epk=kN-sSW2BOQClhwV8qF4DVOq9xrQHJvhvF-zU_W-KbTQ';
 
 const envelopeInput = { version: 1, flags: 0, exp: 1893456000, nonce: fill(16, 0x10), url: URL };
 const envelope = ref.encodeEnvelope(envelopeInput);
