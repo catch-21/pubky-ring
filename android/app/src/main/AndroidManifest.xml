@@ -52,6 +52,31 @@
         </intent-filter>
       </activity>
 
+      <activity
+        android:name=".passkey.PasskeyConsentActivity"
+        android:label="@string/app_name"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:excludeFromRecents="true"
+        android:exported="false"
+        android:screenOrientation="portrait"
+        android:taskAffinity=""
+        android:windowSoftInputMode="adjustPan" />
+
+      <service
+        android:name=".passkey.RingCredentialProviderService"
+        android:enabled="@bool/credential_provider_supported"
+        android:exported="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:permission="android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE">
+        <intent-filter>
+            <action android:name="android.service.credentials.CredentialProviderService" />
+        </intent-filter>
+        <meta-data
+            android:name="android.credentials.provider"
+            android:resource="@xml/pubky_credential_provider" />
+      </service>
+
       <provider
         android:name=".SharedPubkyProvider"
         android:authorities="${applicationId}.sharedpubky"

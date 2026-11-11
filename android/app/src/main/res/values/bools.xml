@@ -1,0 +1,4 @@
+<resources>
+    <!-- Credential Manager provider services need API 34; values-v34 turns this on. -->
+    <bool name="credential_provider_supported">false</bool>
+</resources>
