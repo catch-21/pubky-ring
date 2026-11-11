@@ -6,6 +6,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.CancellationSignal
 import android.os.OutcomeReceiver
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.credentials.exceptions.ClearCredentialException
 import androidx.credentials.exceptions.CreateCredentialException
@@ -20,6 +21,8 @@ import androidx.credentials.provider.CredentialProviderService
 import androidx.credentials.provider.ProviderClearCredentialStateRequest
 import androidx.credentials.provider.PublicKeyCredentialEntry
 import to.pubkyring.R
+
+private const val TAG = "PubkyPasskey"
 
 /**
  * Offers one passkey entry per pubky, but only for WebAuthn get() requests whose challenge
@@ -36,12 +39,18 @@ class RingCredentialProviderService : CredentialProviderService() {
   ) {
     val identities by lazy { PasskeySnapshotStore(this).identities() }
     val entries = mutableListOf<CredentialEntry>()
-    request.beginGetCredentialOptions.filterIsInstance<BeginGetPublicKeyCredentialOption>().forEach { option ->
+    val options = request.beginGetCredentialOptions.filterIsInstance<BeginGetPublicKeyCredentialOption>()
+    var envelopes = 0
+    options.forEach { option ->
       val parsed = PubkyWebAuthn.parseRequest(option.requestJson) ?: return@forEach
       if (!PubkyWebAuthn.isPubkyEnvelope(parsed.challenge)) return@forEach
+      envelopes++
       identities.forEach { identity ->
         entries.add(entryFor(option, identity))
       }
+    }
+    if (envelopes > 0) {
+      Log.d(TAG, "Pubky request: ${entries.size} entries for ${identities.size} identities")
     }
     callback.onResult(BeginGetCredentialResponse(credentialEntries = entries))
   }

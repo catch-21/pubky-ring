@@ -8,7 +8,7 @@ import {
 export interface PasskeyProviderStatus {
 	/** The OS can load Ring as a passkey provider. */
 	supported: boolean;
-	/** iOS only: whether the user has turned Ring on in AutoFill settings. Null when the OS cannot say. */
+	/** Whether the user has turned Ring on as a passkey provider. Null when the OS cannot say. */
 	enabled: boolean | null;
 	/** iOS only: whether the OS passes PRF inputs to providers (needed for the mailbox route). */
 	prfSupported: boolean;

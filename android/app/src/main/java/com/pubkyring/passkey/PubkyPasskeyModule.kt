@@ -1,5 +1,6 @@
 package to.pubkyring.passkey
 
+import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -35,13 +36,25 @@ class PubkyPasskeyModule(private val reactContext: ReactApplicationContext) :
     }
   }
 
+  private fun isProviderEnabled(): Boolean? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || !providerSupported) return null
+    return try {
+      reactContext
+          .getSystemService(android.credentials.CredentialManager::class.java)
+          ?.isEnabledCredentialProviderService(
+              ComponentName(reactContext, RingCredentialProviderService::class.java))
+    } catch (e: Exception) {
+      null
+    }
+  }
+
   @ReactMethod
   fun getProviderStatus(promise: Promise) {
     promise.resolve(
         Arguments.createMap().apply {
           putBoolean("supported", providerSupported)
-          // Android has no public API that reports whether a provider is enabled.
-          putNull("enabled")
+          val enabled = isProviderEnabled()
+          if (enabled == null) putNull("enabled") else putBoolean("enabled", enabled)
           putBoolean("prfSupported", providerSupported)
         },
     )

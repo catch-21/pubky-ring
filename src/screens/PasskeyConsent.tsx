@@ -145,7 +145,13 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 					<TextXlB>{t('passkey.errorTitle')}</TextXlB>
 					<TextBaseM accessibilityRole="alert">{state.message}</TextBaseM>
 				</View>
-				<Button text={t('common.close')} size="large" onPress={() => cancel(state.message)} />
+				<Button
+					text={t('common.close')}
+					size="large"
+					style={styles.fullWidthButton}
+					testID="PasskeyConsentClose"
+					onPress={() => cancel(state.message)}
+				/>
 			</ThemedView>
 		);
 	}
@@ -228,6 +234,7 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 				<Button
 					text={t('auth.deny')}
 					size="large"
+					style={styles.fullWidthButton}
 					variant="secondary"
 					disabled={authorizing}
 					testID="PasskeyConsentDeny"
@@ -251,6 +258,7 @@ const styles = StyleSheet.create({
 	switch: { width: 36, height: 20, padding: 2, borderRadius: 10 },
 	switchThumb: { width: 16, height: 16, borderRadius: 8 },
 	footer: { gap: 12 },
+	fullWidthButton: { flex: 0, width: '100%' },
 });
 
 export default memo(PasskeyConsent);

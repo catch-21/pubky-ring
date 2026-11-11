@@ -7,7 +7,7 @@
  *   magic "PKYWA1" (6) | version u8 | flags u8 | exp u32 (unix s) |
  *   nonce (16) | urlLen u16 | pubkyauth:// URL (UTF-8, urlLen bytes)
  *
- * Keep in sync with the Swift (ios/PubkyPasskeyExtension) and web
+ * Keep in sync with the Swift (ios/PubkyRingCredentialProvider) and web
  * (pubky-app src/libs/passkey) implementations. Shared vectors live in
  * __tests__/fixtures/passkey/vectors.json.
  */

@@ -4,7 +4,7 @@ import { decodeEnvelope, PubkyEnvelope } from './envelope';
  * How a request's client ID (`cid`) must relate to the WebAuthn rpId that the
  * OS verified. James chose 'exact' (PLAN.md section 14, decision 4). Switch to
  * 'subdomain' to also accept, for example, cid `staging.pubky.app` at rpId
- * `pubky.app`. The Swift twin lives in ios/PubkyPasskeyExtension/PasskeyPolicy.swift.
+ * `pubky.app`. The Swift twin lives in ios/PubkyRingCredentialProvider/PasskeyPolicy.swift.
  */
 export type ClientIdPolicy = 'exact' | 'subdomain';
 export const CLIENT_ID_POLICY: ClientIdPolicy = 'exact';
