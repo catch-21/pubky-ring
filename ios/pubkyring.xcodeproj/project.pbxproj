@@ -16,6 +16,7 @@
 		761780EF2CA45674006654EF /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EE2CA45674006654EF /* SceneDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		B10A00010000000000000001 /* DeviceAuthentication.m in Sources */ = {isa = PBXBuildFile; fileRef = B10A00020000000000000001 /* DeviceAuthentication.m */; };
+		B10A00010000000000000003 /* PubkyPasskey.m in Sources */ = {isa = PBXBuildFile; fileRef = B10A00020000000000000003 /* PubkyPasskey.m */; };
 		B10A00010000000000000002 /* PrivacyCover.m in Sources */ = {isa = PBXBuildFile; fileRef = B10A00020000000000000002 /* PrivacyCover.m */; };
 		F0B0F0C33BFC0AA7CD867F18 /* libPods-pubkyring.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F66FC2D5C5C4019367FA619 /* libPods-pubkyring.a */; };
 /* End PBXBuildFile section */
@@ -33,7 +34,9 @@
 		761780EE2CA45674006654EF /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SceneDelegate.swift; path = pubkyring/SceneDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = pubkyring/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		B10A00020000000000000001 /* DeviceAuthentication.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = DeviceAuthentication.m; path = pubkyring/DeviceAuthentication.m; sourceTree = "<group>"; };
+		B10A00020000000000000003 /* PubkyPasskey.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = PubkyPasskey.m; path = pubkyring/PubkyPasskey.m; sourceTree = "<group>"; };
 		B10A00020000000000000002 /* PrivacyCover.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = PrivacyCover.m; path = pubkyring/PrivacyCover.m; sourceTree = "<group>"; };
+		B10A00030000000000000001 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		C21B8554B47148DBBCC60B15 /* InterTight-VariableFont_wght.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "InterTight-VariableFont_wght.ttf"; path = "../assets/fonts/InterTight-VariableFont_wght.ttf"; sourceTree = "<group>"; };
 		E9BEEC22DDF3D2C7155A00F4 /* Pods-pubkyring.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-pubkyring.debug.xcconfig"; path = "Target Support Files/Pods-pubkyring/Pods-pubkyring.debug.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -66,6 +69,7 @@
 				4B1A7B8E2C3D4E5F00112233 /* SharedPubky.m */,
 				B10A00020000000000000001 /* DeviceAuthentication.m */,
 				B10A00020000000000000002 /* PrivacyCover.m */,
+				B10A00020000000000000003 /* PubkyPasskey.m */,
 			);
 			name = pubkyring;
 			sourceTree = "<group>";
@@ -95,6 +99,7 @@
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
 				8EC77A4C5B2943A2B5BB7061 /* Resources */,
+				B10A00030000000000000002 /* Config */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -115,6 +120,14 @@
 				C21B8554B47148DBBCC60B15 /* InterTight-VariableFont_wght.ttf */,
 			);
 			name = Resources;
+			sourceTree = "<group>";
+		};
+		B10A00030000000000000002 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				B10A00030000000000000001 /* Signing.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
@@ -281,6 +294,7 @@
 				4B1A7B8F2C3D4E5F00112233 /* SharedPubky.m in Sources */,
 				B10A00010000000000000001 /* DeviceAuthentication.m in Sources */,
 				B10A00010000000000000002 /* PrivacyCover.m in Sources */,
+				B10A00010000000000000003 /* PubkyPasskey.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -295,7 +309,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = pubkyring/pubkyring.entitlements;
 				CURRENT_PROJECT_VERSION = 4;
-				DEVELOPMENT_TEAM = KYH47R284B;
+				DEVELOPMENT_TEAM = "$(RING_DEVELOPMENT_TEAM)";
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = pubkyring/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Pubky Ring";
@@ -311,7 +325,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = app.pubkyring;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(RING_APP_BUNDLE_ID)";
 				PRODUCT_NAME = pubkyring;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -327,7 +341,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = pubkyring/pubkyring.entitlements;
 				CURRENT_PROJECT_VERSION = 4;
-				DEVELOPMENT_TEAM = KYH47R284B;
+				DEVELOPMENT_TEAM = "$(RING_DEVELOPMENT_TEAM)";
 				INFOPLIST_FILE = pubkyring/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Pubky Ring";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -342,7 +356,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = app.pubkyring;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(RING_APP_BUNDLE_ID)";
 				PRODUCT_NAME = pubkyring;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -352,6 +366,7 @@
 		};
 		83CBBA201A601CBA00E9B192 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B10A00030000000000000001 /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
@@ -439,6 +454,7 @@
 		};
 		83CBBA211A601CBA00E9B192 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B10A00030000000000000001 /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
