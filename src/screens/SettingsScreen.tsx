@@ -41,6 +41,7 @@ import {
 	DeviceAuthError,
 } from '../utils/deviceAuth';
 import { republishAllHomeserverRecords } from '../utils/pubky.ts';
+import PasskeySettingsSection from '../components/PasskeySettingsSection.tsx';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
@@ -269,6 +270,7 @@ const SettingsScreen = ({ navigation }: Props): ReactElement => {
 					</View>
 					{!!deviceAuth.error && <TextSmM accessibilityRole="alert">{deviceAuth.error}</TextSmM>}
 				</View>
+				<PasskeySettingsSection />
 				<View>
 					<View style={styles.textSection}>
 						<TextXsM>{t('settings.migrateToOtherDevice')}</TextXsM>

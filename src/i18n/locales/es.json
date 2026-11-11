@@ -524,5 +524,34 @@
 		"signOutAction": "Cerrar sesión",
 		"signedOut": "Sesión cerrada",
 		"cleanupPending": "No se pudo revocar parte del acceso anterior de Ring."
+	},
+	"passkey": {
+		"consentTitle": "Iniciar sesión con Pubky Ring",
+		"requestingSite": "SITIO SOLICITANTE",
+		"verifiedByBrowser": "Tu navegador confirmó que esta solicitud viene de este sitio.",
+		"errorTitle": "Solicitud de inicio de sesión rechazada",
+		"errors": {
+			"generic": "Pubky Ring no pudo completar este inicio de sesión.",
+			"malformed": "La solicitud de inicio de sesión no es válida.",
+			"expired": "La solicitud ha caducado. Vuelve a intentarlo desde el sitio web.",
+			"lifetime": "La solicitud de inicio de sesión dura demasiado.",
+			"replayed": "Esta solicitud de inicio de sesión ya se ha usado.",
+			"unsupported_link": "Este tipo de solicitud no es compatible con el inicio de sesión con passkey.",
+			"insecure_relay": "La solicitud usa un relay inseguro.",
+			"client_id_mismatch": "La app indicada en la solicitud no coincide con el sitio web.",
+			"origin_mismatch": "El origen del navegador no coincide con el sitio web.",
+			"unknown_pubky": "Este pubky no está disponible en Pubky Ring.",
+			"invalid_link": "Pubky Ring no pudo leer la solicitud de inicio de sesión."
+		},
+		"settings": {
+			"title": "INICIO DE SESIÓN CON PASSKEY",
+			"description": "Inicia sesión en sitios Pubky desde la hoja de passkeys del navegador. Activa Pubky Ring como proveedor de passkeys.",
+			"enabled": "Pubky Ring está activado como proveedor de passkeys.",
+			"disabled": "Pubky Ring está desactivado como proveedor de passkeys.",
+			"androidHint": "Elige Pubky Ring en Contraseñas, llaves de acceso y cuentas.",
+			"iosHint": "Activa Pubky Ring en Autorrelleno y contraseñas.",
+			"iosPrfMissing": "El inicio de sesión con passkey funciona mejor en iOS 18 o posterior.",
+			"open": "Abrir ajustes de passkeys"
+		}
 	}
 }

@@ -17,6 +17,7 @@ import { setDeepLink } from './src/store/slices/pubkysSlice.ts';
 import { parseInput } from './src/utils/inputParser.ts';
 import { publishAllOwnedPubkys } from './src/utils/pubky.ts';
 import { getAllPubkysFromStore } from './src/utils/store-helpers.ts';
+import { usePasskeySnapshotSync } from './src/passkey/usePasskeySnapshotSync.ts';
 import './src/theme/toast';
 
 function App(): React.JSX.Element {
@@ -27,6 +28,7 @@ function App(): React.JSX.Element {
 	isOnlineRef.current = isOnline;
 	const dispatch = useDispatch();
 	const { t } = useTranslation();
+	usePasskeySnapshotSync();
 
 	// Handle deep linking
 	useEffect(() => {
