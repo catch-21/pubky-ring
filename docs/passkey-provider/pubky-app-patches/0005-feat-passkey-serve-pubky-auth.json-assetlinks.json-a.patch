@@ -1,0 +1,78 @@
+From 48c632678524ab084169511a0759d2633ed99424 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Wed, 11 Nov 2026 10:52:49 +0000
+Subject: [PATCH 5/6] feat(passkey): serve pubky-auth.json, assetlinks.json and
+ apple-app-site-association
+
+---
+ .../apple-app-site-association/route.ts           | 15 +++++++++++++++
+ src/app/.well-known/assetlinks.json/route.ts      | 13 +++++++++++++
+ src/app/.well-known/pubky-auth.json/route.ts      | 14 ++++++++++++++
+ 3 files changed, 42 insertions(+)
+ create mode 100644 src/app/.well-known/apple-app-site-association/route.ts
+ create mode 100644 src/app/.well-known/assetlinks.json/route.ts
+ create mode 100644 src/app/.well-known/pubky-auth.json/route.ts
+
+diff --git a/src/app/.well-known/apple-app-site-association/route.ts b/src/app/.well-known/apple-app-site-association/route.ts
+new file mode 100644
+index 00000000..4f101b35
+--- /dev/null
++++ b/src/app/.well-known/apple-app-site-association/route.ts
+@@ -0,0 +1,15 @@
++import { NextResponse } from 'next/server';
++import { getAppleAppSiteAssociation } from '@/libs/passkey/association';
++
++/**
++ * Associated domains for Pubky Ring on iOS. Browser passkey sign-in does not need it; it lets the
++ * Ring app use this domain's credentials natively later. Configure with PASSKEY_IOS_APP_IDS
++ * (comma-separated `<TEAM_ID>.<bundle id>`). Served as JSON without a file extension, as Apple requires.
++ */
++export const dynamic = 'force-dynamic';
++
++export function GET() {
++  return NextResponse.json(getAppleAppSiteAssociation(process.env), {
++    headers: { 'Cache-Control': 'public, max-age=300' },
++  });
++}
+diff --git a/src/app/.well-known/assetlinks.json/route.ts b/src/app/.well-known/assetlinks.json/route.ts
+new file mode 100644
+index 00000000..ef8ea0bc
+--- /dev/null
++++ b/src/app/.well-known/assetlinks.json/route.ts
+@@ -0,0 +1,13 @@
++import { NextResponse } from 'next/server';
++import { getPasskeyAssetLinks } from '@/libs/passkey/association';
++
++/**
++ * Digital Asset Links for the Pubky Ring Android app. Browser passkey sign-in does not need it;
++ * it lets Ring use this domain's credentials natively later. Configure with
++ * PASSKEY_ANDROID_PACKAGE and PASSKEY_ANDROID_CERT_SHA256 (comma-separated fingerprints).
++ */
++export const dynamic = 'force-dynamic';
++
++export function GET() {
++  return NextResponse.json(getPasskeyAssetLinks(process.env), { headers: { 'Cache-Control': 'public, max-age=300' } });
++}
+diff --git a/src/app/.well-known/pubky-auth.json/route.ts b/src/app/.well-known/pubky-auth.json/route.ts
+new file mode 100644
+index 00000000..fd128353
+--- /dev/null
++++ b/src/app/.well-known/pubky-auth.json/route.ts
+@@ -0,0 +1,14 @@
++import { getDefaultHttpRelay } from '@/config/network';
++
++/**
++ * Tells Pubky Ring's iOS passkey extension which relay holds this site's request mailbox
++ * (pubky-ring docs/passkey-provider/PLAN.md, section 14 decision 6).
++ */
++export const dynamic = 'force-dynamic';
++
++export function GET() {
++  return Response.json(
++    { mailboxRelay: getDefaultHttpRelay() },
++    { headers: { 'Cache-Control': 'public, max-age=300', 'Access-Control-Allow-Origin': '*' } },
++  );
++}
+--
+2.43.0
+

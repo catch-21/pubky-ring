@@ -383,10 +383,10 @@ flowchart LR
 ### 5.1 Target and configuration
 
 - **Target:** a new native Swift app extension, `PubkyRingCredentialProvider`, in `ios/pubkyring.xcodeproj`. This is a bare React Native project, so the target is added in Xcode or with a scripted `xcodeproj` edit, not with Expo config plugins.
-  - Bundle ID: `app.pubkyring.CredentialProvider`.
+  - Bundle ID: `$(RING_PASSKEY_EXTENSION_ID)` from `ios/Config/Signing.xcconfig` (decision 11).
   - Extension point: `com.apple.authentication-services-credential-provider-ui`.
   - Principal class: `CredentialProviderViewController`.
-- **Deployment target:** iOS 17.0 for the extension, or 18.0 if the mailbox route is chosen, since it needs PRF inputs. The app stays at 15.1, and Ring hides the passkey settings entry on older systems.
+- **Deployment target:** iOS 17.0 for the extension. The PRF mailbox code is gated with `#available(iOS 18.0, *)` (decision 1). The app stays at 15.1, and Ring hides the passkey settings entry on older systems.
 - **Info.plist `NSExtensionAttributes > ASCredentialProviderExtensionCapabilities`:**
   - `ProvidesPasskeys = YES`
   - `ProvidesPasswords = NO`
@@ -397,8 +397,8 @@ flowchart LR
 - **Entitlements, on both the app and the extension:**
   - `com.apple.developer.authentication-services.autofill-credential-provider = YES` **[Verified]**;
   - `keychain-access-groups` containing `$(AppIdentifierPrefix)app.pubkyring`, so the extension can read Ring's existing items **[Verified rule; Spike to confirm with Ring's real items]**;
-  - `com.apple.security.application-groups = group.app.pubkyring` for the snapshot and the identity metadata.
-- **Signing:** the project is hard-wired to team `KYH47R284B`, and `SharedPubky.m` line 5 hard-codes `KYH47R284B.pubky.shared`. A spike in James's fork needs either Synonym's team or a fork-specific team with its own bundle IDs and App Group. That is decision 11 in section 14.
+  - `com.apple.security.application-groups = $(RING_APP_GROUP)` for the snapshot and the identity metadata.
+- **Signing:** upstream hard-wires team `KYH47R284B`, and `SharedPubky.m` hard-coded `KYH47R284B.pubky.shared`. The MVP moves the team, bundle IDs and App Group into `ios/Config/Signing.xcconfig`, and `SharedPubky.m` builds the group from `Info.plist` (decision 11).
 - **Linking `PubkyCore`:**
   - The npm package ships a static `libpubkycore.a`, about 65 MB unstripped per architecture. Linking it into both the app and the extension duplicates it in the IPA.
   - Option 1, MVP: link it statically into the extension too, and accept the size. Measure the stripped size.
@@ -435,8 +435,9 @@ Registration builds a minimal CBOR `attestationObject` (`fmt: "none"`) containin
   3. Before shipping, split the mnemonic into its own item so the extension never loads it (section 8.1).
   4. Adopted Bitkit identities are read from the existing `pubky.shared` group, as `SharedPubky.m` already does.
 - **Ceremony keys:** Secure Enclave P-256 keys (`kSecAttrTokenIDSecureEnclave`), created in the extension under the shared access group and labelled by credential ID. They cannot be exported.
-- **Snapshot**, written by the app to `group.app.pubkyring/ring-snapshot.json` on every relevant store change and at launch:
-  - the pubkys with their display names, homeserver and `signedUp` flag, and `sourceApp` for adopted keys;
+- **Snapshot**, written by the app to `passkey_snapshot.json` in the App Group container on every relevant store change and at launch:
+  - the pubkys that can authorise (signed up, or adopted from another app), with their display names, store keys and `sourceApp` for adopted keys;
+  - the rpIds to register identities for (`PASSKEY_KNOWN_RP_IDS`);
   - the settings the extension honours (`requireDeviceAuth`);
   - the snapshot schema version.
 
@@ -714,7 +715,7 @@ User instructions, for the README and a pubky-app help link:
 
 ## 10. pubky-app demo changes
 
-The demo is to be implemented later on a branch in [catch-21/pubky-app](https://github.com/catch-21/pubky-app), cut from `dev`, for example `feat/ring-passkey-signin`.
+The demo is to be implemented later on a branch in [catch-21/pubky-app](https://github.com/catch-21/pubky-app), cut from `dev`, for example `feat/ring-passkey-signin`. The file names below are the plan; [MVP.md](MVP.md) lists what was built.
 
 ### 10.1 Prerequisite: grant flow
 
@@ -728,7 +729,7 @@ Upgrade `@synonymdev/pubky` from `0.8.0` to `0.18.x` ([package.json line 50](htt
   - the signup path: replace the URL-rewrite hack with `AuthFlowKind.signup(hs, token)`;
   - `createCancelableAuthApproval`'s use of `tryPollOnce`.
 - This is the largest single change and needs regression testing on desktop QR too. Decision 7 is whether to upgrade the whole app or only the passkey path.
-- `clientId` should be the deployment host (`window.location.hostname`), so it satisfies Ring's `cid` and rpId policy.
+- `clientId` is the app's grant client ID (`PUBKY_RUNTIME_AUTH_CLIENT_ID`, default `pubky.app` or `staging.pubky.app`), because `saveSession` rejects grants for any other client ID. Ring requires `cid` to equal the rpId, so the passkey path is offered only where the client ID equals `window.location.hostname`. A preview or Vercel deploy sets the client ID to its own host.
 - Confirm that the target homeserver (staging, or the demo's own) supports `/auth/grant/session` and signed approvals **[Unverified for staging]**.
 
 ### 10.2 New code
@@ -792,6 +793,8 @@ export async function signInWithRingPasskey(): Promise<Session> {
 - **Hosting:** Vercel Hobby, deployed from the `catch-21/pubky-app` fork branch; the deployment's hostname becomes the rpId (decision 8).
 
 ## 11. Ring change list
+
+The plan as written; [MVP.md](MVP.md) lists the files as built.
 
 | Area | Files |
 |---|---|
@@ -871,9 +874,11 @@ The spike must answer:
 | 7 | iOS extension memory limit (about 80–120 MB, unpublished). React Native in the extension is risky. | Medium | **[Reported]** Native Swift extension. |
 | 8 | IPA size grows if `libpubkycore` is linked into both the app and the extension. | Low to medium | **[Spike]** |
 | 9 | App Store and Play review: a "passkey provider" that serves only Pubky requests may get questions. | Low to medium | **[Unverified]** Explain in review notes; it genuinely provides passkeys. |
-| 10 | Signing: the project is bound to Synonym's Apple team and the hard-coded shared access group. A fork build needs its own team, IDs and App Group. | Blocker for the spike unless decided | **[Verified]** Decision 11. |
+| 10 | Signing: the project is bound to Synonym's Apple team and the hard-coded shared access group. A fork build needs its own team, IDs and App Group. | Blocker for the spike unless decided | **[Verified]** Resolved by decision 11 (`ios/Config/Signing.xcconfig`). |
 | 11 | In-app browsers (`WKWebView`) usually cannot do WebAuthn. | Low | **[Unverified]** Deep-link fallback. |
 | 12 | Grant and signed-approval support on the target homeserver (staging) has not been checked. | Low to medium | **[Unverified]** Check in milestone (b). |
+| 13 | pubky-app saves only grants for its own client ID (`PUBKY_RUNTIME_AUTH_CLIENT_ID`), while Ring needs `cid` to equal the rpId. A deploy on any other host must set the client ID to that host, or the page falls back to the deep link. | Medium (deploy configuration) | **[Verified in code]** Handled in the MVP; see MVP.md. |
+| 14 | A staging deploy (`PUBKY_RUNTIME_ENV=staging`) rejects keys whose homeserver is not the staging homeserver. Ring release builds sign up on the production homeserver, so the demo needs a Ring debug build or a staging identity. | Medium (demo setup) | **[Verified in code]** See MVP.md. |
 
 ## 14. Decisions
 
@@ -891,7 +896,7 @@ James answered decisions 1, 4, 5, 8 and 11. The MVP uses the recommended option 
 5. **Auto Auth on the passkey path. Answered:** Auto Auth is a developer option, and the passkey path treats it exactly like QR scanning. If Auto Auth is on, Ring skips consent as scanning does; if it is off, Ring shows consent. Ring reads the same `getAutoAuth` selector, so Auto Auth is ignored in release builds and whenever device authentication is required, as it is for scanning.
 6. **Mailbox relay discovery. Default:** Ring tries `https://{rpId}/.well-known/pubky-auth.json` (`{"mailboxRelay": "https://…/inbox"}`) and falls back to its default relay (`https://httprelay.pubky.app/inbox`). The demo serves the file.
 7. **pubky-app SDK upgrade scope. Default:** upgrade the whole app to `@synonymdev/pubky` 0.18.0, which upstream already uses with grant flows (0.17.1), but request signed approvals (`af=v1`) only on the passkey path.
-8. **Demo hosting. Answered:** Vercel Hobby, deployed from the `catch-21/pubky-app` fork branch. The deployment's host is the rpId and the `cid`. It serves `/.well-known/assetlinks.json`, `/.well-known/apple-app-site-association` and `/.well-known/pubky-auth.json`, and the spike page at `/passkey-spike`.
+8. **Demo hosting. Answered:** Vercel Hobby, deployed from the `catch-21/pubky-app` fork branch. The deployment's host is the rpId and the `cid`, so the deployment sets `PUBKY_RUNTIME_AUTH_CLIENT_ID` to that host. It serves `/.well-known/assetlinks.json`, `/.well-known/apple-app-site-association` and `/.well-known/pubky-auth.json`, and the spike page at `/passkey-spike`.
 9. **Signup. Default:** sign-in only for v1.
 10. **Long term. Default:** treat Design A as the MVP design, and decide on Design C after real-device results.
 11. **Signing identity. Answered:** never use Synonym's team `KYH47R284B` for this work. The team ID, bundle IDs, keychain group and App Group come from `ios/Config/Signing.xcconfig`, with placeholders James fills in. `SharedPubky.m` reads its access group from `Info.plist` instead of hard-coding it.
