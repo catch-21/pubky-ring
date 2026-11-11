@@ -538,7 +538,7 @@ sequenceDiagram
 1. `PendingIntentHandler.retrieveProviderGetCredentialRequest(intent)` gives `callingAppInfo`, the option's `requestJson` and `clientDataHash`.
 2. Compute `origin = callingAppInfo.getOrigin(privilegedAllowlistJson)`. Ring ships Google's [allowlist](https://www.gstatic.com/gpm-passkeys-privileged-apps/apps.json), optionally with a community list as Bitwarden does, and refreshes it with app releases.
    - If `origin` is null (unknown browser or a native app): v1 refuses. Native-app callers would need a Digital Asset Links check, which is out of scope.
-   - Check that `origin`'s host equals the rpId or is a subdomain of it. Per Android's guidance, do not reject Related Origin Requests on that basis. v1 does not support them, so it simply requires a match.
+   - Check that `origin`'s host equals the rpId (decision 4; a later relaxation would also allow subdomains). Per Android's guidance, do not reject Related Origin Requests on that basis. v1 does not support them, so it simply requires a match.
 3. Host a React Native surface. The activity extends `ReactActivity` with main component `PubkyPasskeyConsent`, registered in `index.js`. It shares the app's `ReactHost`, Redux store, theme and i18n, and passes `{pubky, rpId, origin, envelope}` as initial props.
 4. The JavaScript consent screen reuses `ConfirmAuth` building blocks and `performAuth` (section 7), then calls a native `PasskeyResult.complete({credentialId, authenticatorData, signature, userHandle, prf})` or `PasskeyResult.cancel(reason)`.
 5. Kotlin builds the `AuthenticationResponseJSON`:
@@ -596,12 +596,12 @@ The provider consent screen must show:
 - the **OS-verified domain** (rpId), with a "verified by your browser" note, and the `cid`;
 - the selected identity (name and truncated pubky), plus the expected-identity banner if `spk` is present;
 - the capabilities list with read, write and encrypt icons, and the encryption toggle;
-- a highlight for scopes outside the app's own namespace, such as root `/:rw` or another app's `/pub/<x>/` (decision 4);
+- a highlight for scopes outside the app's own namespace, such as root `/:rw` or another app's `/pub/<x>/` (decision 4; not in the MVP);
 - the relay host;
 - the 60 s countdown, Deny, and swipe or button to approve;
 - device authentication when `requireDeviceAuth` is on.
 
-Auto-auth is ignored on this path (decision 5).
+Auto Auth behaves as it does for QR scanning: when it is on, Ring skips this screen; when it is off, Ring shows it (decision 5).
 
 | Ring piece | Android provider | iOS extension |
 |---|---|---|
@@ -635,7 +635,7 @@ Shared test vectors go in `__tests__/fixtures/passkey/*.json`: envelopes, mailbo
   - **QR-jacking and relay phishing:** an attacker starts a genuine flow, keeps the PoP and HPKE keys, and shows the link or QR on an attacker site or in a message. A user who approves gives the attacker a session.
   - **Scheme hijacking on Android:** any app can register `pubkyauth://`.
 - **On the passkey path, the browser binds the call to the page origin.** Ring gets the rpId from the OS (iOS) or from the rpId plus an allowlisted browser origin (Android). Ring enforces this v1 policy:
-  - `cid` must equal the rpId, or be a subdomain of it, for example rpId `pubky.app` and `cid` `staging.pubky.app`;
+  - `cid` must equal the rpId exactly (decision 4). A single policy function (`isClientIdAllowed` in Ring) holds the rule, so it can later be relaxed to allow subdomains, for example rpId `pubky.app` and `cid` `staging.pubky.app`;
   - `relay` must be `https`;
   - the consent screen shows the rpId as the requester.
 
@@ -789,7 +789,7 @@ export async function signInWithRingPasskey(): Promise<Session> {
   - Vitest unit tests for the envelope and mailbox, against Ring's fixtures;
   - a hook test with a mocked `navigator.credentials`;
   - a manual device checklist, because Cypress cannot drive OS sheets.
-- **Hosting:** HTTPS on a host James controls; its hostname becomes the rpId (decision 8).
+- **Hosting:** Vercel Hobby, deployed from the `catch-21/pubky-app` fork branch; the deployment's hostname becomes the rpId (decision 8).
 
 ## 11. Ring change list
 
@@ -875,19 +875,26 @@ The spike must answer:
 | 11 | In-app browsers (`WKWebView`) usually cannot do WebAuthn. | Low | **[Unverified]** Deep-link fallback. |
 | 12 | Grant and signed-approval support on the target homeserver (staging) has not been checked. | Low to medium | **[Unverified]** Check in milestone (b). |
 
-## 14. Decisions needed from James
+## 14. Decisions
 
-1. **iOS floor and channel:** accept iOS 18+ for passkey sign-in (PRF mailbox), or also chase iOS 17 through the `allowCredentials` route if the spike allows it?
-2. **Android consent UI:** a React Native surface reusing `ConfirmAuth` (recommended), or native Compose for parity with iOS?
-3. **iOS identity population:** page-initiated `create()` enrolment, Ring-side registration for an allowlist of Pubky rpIds, or both (recommended)? Which rpIds go on the allowlist?
-4. **Strictness of the `cid` and rpId policy:** exact match only, or subdomains allowed (recommended)? Should scopes outside `/pub/<app>/` show a warning or need a second confirmation? Should QR and deep-link consent be labelled "unverified"?
-5. **Auto-auth on the passkey path:** always require consent (recommended), or honour the existing Auto Auth setting?
-6. **Mailbox relay discovery:** Ring's fixed default relay, or `https://{rpId}/.well-known/pubky-auth.json`?
-7. **pubky-app SDK upgrade scope:** move the whole app to grant flows (cleaner, bigger regression surface), or use grant flows only on the passkey path?
-8. **Demo hosting:** which HTTPS host is the rpId for the spike page and the pubky-app demo?
-9. **Signup:** keep the passkey path sign-in only for v1 (recommended), or include `signup_grant` and onboarding `Scan.tsx`?
-10. **Long term:** pursue Design C (homeserver-verified WebAuthn PoP) upstream later, or treat Design A as the end state?
-11. **Signing identity:** build the spike with Synonym's Apple team and bundle IDs, or with a fork-specific team, bundle IDs and App Group (needs changes to `SharedPubky.m` and the entitlements)?
+James answered decisions 1, 4, 5, 8 and 11. The MVP uses the recommended option for the rest. Each is marked **Answered** or **Default**, and each default is kept in one place so it is easy to change.
+
+1. **iOS floor and channel. Answered:** match Ring's existing deployment target (iOS 15.1), and gate only the passkey feature on the oldest iOS version that supports it.
+   - The Ring app stays at iOS 15.1. Nothing outside the passkey feature changes.
+   - The credential provider extension targets **iOS 17.0**. Passkey support for third-party providers (`ASPasskeyCredentialRequest`, `ASPasskeyCredentialIdentity`, `prepareInterface(forPasskeyRegistration:)`) first shipped in iOS 17. Older iOS versions never load the extension, so they need no runtime check there.
+   - The PRF mailbox route needs **iOS 18.0**, because `ASPasskeyCredentialRequest.extensionInput` (which carries the PRF input) is iOS 18+. The extension checks `if #available(iOS 18.0, *)` before reading it.
+   - On iOS 17, the extension only accepts the `allowCredentials` route (`E` as a credential ID). That route is undocumented and **[Unverified]**. The demo page uses the mailbox route by default and offers the `allowCredentials` route as a debug switch.
+   - The Ring app shows its passkey settings row only on iOS 17+ (`Platform.Version` check, plus `@available` in native code).
+2. **Android consent UI. Default:** a React Native surface (`PubkyPasskeyConsent`) that reuses the `ConfirmAuth` building blocks.
+3. **iOS identity population. Default:** both. The page can enrol with `create()`, and Ring registers identities for an allowlist of rpIds in `src/passkey/config.ts` (`PASSKEY_KNOWN_RP_IDS`).
+4. **Strictness of the `cid` and rpId policy. Answered:** `cid` must equal the rpId exactly. The browser origin's host must also equal the rpId. The rule lives in one function (`isClientIdAllowed` in `src/passkey/policy.ts` and its Swift twin), with a `'subdomain'` mode already written but not enabled. Default for the follow-up questions: no extra scope warning, and no "unverified" label on QR and deep-link consent in the MVP.
+5. **Auto Auth on the passkey path. Answered:** Auto Auth is a developer option, and the passkey path treats it exactly like QR scanning. If Auto Auth is on, Ring skips consent as scanning does; if it is off, Ring shows consent. Ring reads the same `getAutoAuth` selector, so Auto Auth is ignored in release builds and whenever device authentication is required, as it is for scanning.
+6. **Mailbox relay discovery. Default:** Ring tries `https://{rpId}/.well-known/pubky-auth.json` (`{"mailboxRelay": "https://…/inbox"}`) and falls back to its default relay (`https://httprelay.pubky.app/inbox`). The demo serves the file.
+7. **pubky-app SDK upgrade scope. Default:** upgrade the whole app to `@synonymdev/pubky` 0.18.0, which upstream already uses with grant flows (0.17.1), but request signed approvals (`af=v1`) only on the passkey path.
+8. **Demo hosting. Answered:** Vercel Hobby, deployed from the `catch-21/pubky-app` fork branch. The deployment's host is the rpId and the `cid`. It serves `/.well-known/assetlinks.json`, `/.well-known/apple-app-site-association` and `/.well-known/pubky-auth.json`, and the spike page at `/passkey-spike`.
+9. **Signup. Default:** sign-in only for v1.
+10. **Long term. Default:** treat Design A as the MVP design, and decide on Design C after real-device results.
+11. **Signing identity. Answered:** never use Synonym's team `KYH47R284B` for this work. The team ID, bundle IDs, keychain group and App Group come from `ios/Config/Signing.xcconfig`, with placeholders James fills in. `SharedPubky.m` reads its access group from `Info.plist` instead of hard-coding it.
 
 ## 15. References
 
