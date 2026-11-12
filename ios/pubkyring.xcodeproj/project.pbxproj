@@ -14,6 +14,7 @@
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		1BC223875628A40CD99765EB /* PasskeyApprover.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5379ADE81FBB8AC59B2B8E /* PasskeyApprover.swift */; };
 		2113CB82987B0C3800F4797B /* PasskeyMailbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 457166694338FEC60A6040B0 /* PasskeyMailbox.swift */; };
+		FCAF45184E2933C3C8C1392B /* PasskeyReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6AD48037650883857F7F9D8 /* PasskeyReport.swift */; };
 		2268B3EBBBB3B49E9B1D53B9 /* InterTight-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5E9AE146D13AA9A252A41548 /* InterTight-Regular.ttf */; };
 		245636CB970E9E7A326CD1D1 /* RingStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F74BC9002422DD3B9894C715 /* RingStrings.swift */; };
 		397995DBE3DA2F80D3367D47 /* InterTight-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B9A5BD1B40A29C0644C2FC4C /* InterTight-Bold.ttf */; };
@@ -84,6 +85,7 @@
 		37923825A6F6ABC41FFAFF84 /* InterTight-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "InterTight-Medium.ttf"; path = "../../assets/fonts/InterTight-Medium.ttf"; sourceTree = "<group>"; };
 		44CF7AF8940F303DB899F30F /* shield.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = shield.png; path = ../../src/images/shield.png; sourceTree = "<group>"; };
 		457166694338FEC60A6040B0 /* PasskeyMailbox.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PasskeyMailbox.swift; sourceTree = "<group>"; };
+		B6AD48037650883857F7F9D8 /* PasskeyReport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PasskeyReport.swift; sourceTree = "<group>"; };
 		4B1A7B8C2C3D4E5F00112233 /* AppInfo.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AppInfo.m; path = pubkyring/AppInfo.m; sourceTree = "<group>"; };
 		4B1A7B8E2C3D4E5F00112233 /* SharedPubky.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = SharedPubky.m; path = pubkyring/SharedPubky.m; sourceTree = "<group>"; };
 		4B1A7B902C3D4E5F00112233 /* pubkyring.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = pubkyring.entitlements; path = pubkyring/pubkyring.entitlements; sourceTree = "<group>"; };
@@ -182,6 +184,7 @@
 				31E7F51405A0553BC282AF66 /* PasskeyConsentView.swift */,
 				88A03ED885CD4EEF2F3A7BC5 /* PasskeyEnvelope.swift */,
 				457166694338FEC60A6040B0 /* PasskeyMailbox.swift */,
+				B6AD48037650883857F7F9D8 /* PasskeyReport.swift */,
 				13BD8DC7FD7B917566D4E162 /* PasskeyPolicy.swift */,
 				DD66BF3EC9F185C43A9F0693 /* PasskeyShared.swift */,
 				CF0E597C431466B5C3B65347 /* RingAuthRequest.swift */,
@@ -481,6 +484,7 @@
 				825848A848D5E93B82BA431F /* PasskeyConsentView.swift in Sources */,
 				9AB8CE8342A923F4631DC8FD /* PasskeyEnvelope.swift in Sources */,
 				2113CB82987B0C3800F4797B /* PasskeyMailbox.swift in Sources */,
+				FCAF45184E2933C3C8C1392B /* PasskeyReport.swift in Sources */,
 				F3EB65780CB20C0FA15A1534 /* PasskeyPolicy.swift in Sources */,
 				CCE50700B89A739AAB51DFA8 /* PasskeyShared.swift in Sources */,
 				481E8E9D6FAF6D89218A5543 /* RingAuthRequest.swift in Sources */,

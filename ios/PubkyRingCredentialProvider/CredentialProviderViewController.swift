@@ -10,6 +10,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     let clientDataHash: Data
     let identity: PasskeySnapshot.Identity
     let snapshot: PasskeySnapshot
+    let envelopeBytes: Data
     let validated: PasskeyPolicy.Validated
   }
 
@@ -24,7 +25,6 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
   private var pending: PendingRequest?
   private var listRequest: ListRequest?
   private var isConfiguring = false
-  private var hasFailed = false
   private var isFinished = false
   private weak var sheetView: UIView?
   /// The scroll view under the touch that started the drag, if any.
@@ -99,7 +99,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     guard let request = credentialRequest as? ASPasskeyCredentialRequest,
       let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity,
       let pubky = String(data: identity.userHandle, encoding: .utf8)
-    else { return fail(RingStrings.t("passkey.errors.not_pubky_request")) }
+    else { return refuse("not_pubky_request") }
     var prfInput: Data?
     if #available(iOS 18.0, *) {
       if case .assertion(let input) = request.extensionInput {
@@ -122,7 +122,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
       rpId: requestParameters.relyingPartyIdentifier, clientDataHash: requestParameters.clientDataHash,
       allowedCredentials: requestParameters.allowedCredentials, prfInput: prfInput)
     guard let snapshot = PasskeySnapshot.load(), !snapshot.identities.isEmpty else {
-      return fail(RingStrings.t("passkey.errors.no_pubkys"))
+      return refuse("no_pubkys", envelope: requestParameters.allowedCredentials.first(where: PasskeyEnvelope.hasMagic))
     }
     if snapshot.identities.count == 1 {
       return choose(pubky: snapshot.identities[0].pubky)
@@ -142,9 +142,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
   private func start(rpId: String, pubky: String, clientDataHash: Data, allowedCredentials: [Data], prfInput: Data?) {
     model.phase = .loading
     Task { @MainActor in
-      guard let snapshot = PasskeySnapshot.load(), let identity = snapshot.identity(for: pubky) else {
-        return fail(RingStrings.t("passkey.errors.unknown_pubky"))
-      }
+      // The envelope comes first so that every later refusal can be reported to the page.
       let envelopeBytes: Data
       if let fromAllowList = allowedCredentials.first(where: PasskeyEnvelope.hasMagic) {
         envelopeBytes = fromAllowList
@@ -152,18 +150,22 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         do {
           envelopeBytes = try await PasskeyMailbox.fetchEnvelope(prfInput: prfInput, rpId: rpId)
         } catch {
-          return fail(RingStrings.t("passkey.errors.request_not_found"))
+          return refuse("request_not_found")
         }
       } else {
-        return fail(RingStrings.t("passkey.errors.ios_too_old"))
+        return refuse("ios_too_old")
+      }
+      guard let snapshot = PasskeySnapshot.load(), let identity = snapshot.identity(for: pubky) else {
+        return refuse("unknown_pubky", envelope: envelopeBytes)
       }
       let now = UInt32(Date().timeIntervalSince1970)
       switch PasskeyPolicy.validate(envelopeBytes: envelopeBytes, rpId: rpId, now: now, hasSeenNonce: PasskeyNonceCache.has) {
       case .failure(let reason):
-        fail(RingStrings.t("passkey.errors.\(reason.rawValue)"))
+        refuse(reason.rawValue, envelope: envelopeBytes)
       case .success(let validated):
         pending = PendingRequest(
-          rpId: rpId, clientDataHash: clientDataHash, identity: identity, snapshot: snapshot, validated: validated)
+          rpId: rpId, clientDataHash: clientDataHash, identity: identity, snapshot: snapshot,
+          envelopeBytes: envelopeBytes, validated: validated)
         model.rpId = rpId
         model.relay = validated.link.relay
         model.identity = ConsentIdentity(identity)
@@ -218,11 +220,9 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
       } catch PasskeyApprover.Failure.deviceAuthFailed {
         showConsent()
       } catch PasskeyApprover.Failure.secretUnavailable {
-        fail(RingStrings.t("passkey.errors.secret_unavailable"))
-      } catch PasskeyApprover.Failure.authFailed(let message) {
-        fail(message.isEmpty ? RingStrings.t("passkey.errors.generic") : message)
+        refuse("secret_unavailable", envelope: pending.envelopeBytes)
       } catch {
-        fail(RingStrings.t("passkey.errors.generic"))
+        refuse("approval_failed", envelope: pending.envelopeBytes)
       }
     }
   }
@@ -234,12 +234,19 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     }
     guard !isFinished else { return }
     isFinished = true
-    extensionContext.cancelRequest(withError: ASExtensionError(hasFailed ? .failed : .userCanceled))
+    extensionContext.cancelRequest(withError: ASExtensionError(.userCanceled))
   }
 
-  private func fail(_ message: String) {
-    hasFailed = true
-    model.phase = .failed(message)
+  /// Ends a request Ring will not sign as a failure rather than a cancellation, after reporting
+  /// the reason to the request's relay when the envelope names one (PasskeyReport).
+  private func refuse(_ reason: String, envelope: Data? = nil) {
+    guard !isFinished else { return }
+    isFinished = true
+    model.phase = .loading
+    Task { @MainActor in
+      if let envelope { await PasskeyReport.post(reason: reason, envelopeBytes: envelope) }
+      extensionContext.cancelRequest(withError: ASExtensionError(.failed))
+    }
   }
 
   // MARK: Registration (PLAN.md section 4.6)

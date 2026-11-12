@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks the iOS extension's protocol code against __tests__/fixtures/passkey/vectors.json, and its
-# consent sheet ports (strings, AuthSummary, display helpers, icons, Facehash) against the app's.
+# refusal report and consent sheet ports (strings, AuthSummary, display helpers, icons, Facehash) against the app's.
 # Runs on macOS or Linux with Swift 5.9+; swift-crypto stands in for CryptoKit.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -11,7 +11,7 @@ rm -rf "$work/Sources"
 mkdir -p "$work/Sources/VectorCheck"
 cp "$here/Package.swift" "$work/Package.swift"
 cp "$here/main.swift" "$work/Sources/VectorCheck/main.swift"
-for name in PasskeyEnvelope PasskeyPolicy PasskeyMailbox PasskeyShared WebAuthnEncoding RingStrings RingAuthRequest RingGeometry; do
+for name in PasskeyEnvelope PasskeyPolicy PasskeyMailbox PasskeyReport PasskeyShared WebAuthnEncoding RingStrings RingAuthRequest RingGeometry; do
   {
     printf '#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n'
     sed -e 's/^import CryptoKit$/import Crypto/' \

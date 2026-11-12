@@ -70,6 +70,22 @@ check("mailbox opens to the envelope", opened == bytes)
 check("mailbox bound to rpId", (try? PasskeyMailbox.open(body: unhex(mailbox["bodyHex"] as! String), salt: salt, rpId: "evil.example")) == nil)
 
 let cred = vectors["credentialId"] as! [String: Any]
+let report = vectors["report"] as! [String: Any]
+let reportNonce = unhex(report["nonceHex"] as! String)
+check("report channel", PasskeyReport.channel(nonce: reportNonce) == report["channel"] as! String)
+check("report body", String(decoding: PasskeyReport.body(reason: report["reason"] as! String), as: UTF8.self) == report["body"] as! String)
+check("report url from the envelope's relay", PasskeyReport.url(envelopeBytes: bytes)?.absoluteString == "https://httprelay.staging.pubky.app/inbox/\(report["channel"] as! String)")
+func envelopeWith(relay: String) -> Data {
+  let url = "pubkyauth://signin_grant?relay=\(relay.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!)&cid=pubky.app"
+  var data = Data("PKYWA1".utf8) + Data([1, 0]) + Data([0x70, 0xdb, 0xd8, 0x80]) + reportNonce
+  data += Data([UInt8(url.utf8.count >> 8), UInt8(url.utf8.count & 0xff)]) + Data(url.utf8)
+  return data
+}
+check("report url trims the relay's slashes", PasskeyReport.url(envelopeBytes: envelopeWith(relay: report["relay"] as! String))?.absoluteString == (report["url"] as! String))
+check("no report to an http relay", PasskeyReport.url(envelopeBytes: envelopeWith(relay: "http://relay.example/inbox")) == nil)
+check("no report to a relay with a query", PasskeyReport.url(envelopeBytes: envelopeWith(relay: "https://relay.example/inbox?x=1")) == nil)
+check("no report without an envelope", PasskeyReport.url(envelopeBytes: Data("nope".utf8)) == nil)
+
 check("credential id", hex(PasskeyShared.credentialId(rpId: cred["rpId"] as! String, pubky: cred["pubky"] as! String)) == cred["hex"] as! String)
 
 let ceremony = P256.Signing.PrivateKey()

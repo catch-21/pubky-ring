@@ -9,7 +9,6 @@ final class PasskeyConsentModel: ObservableObject {
     case choosing
     case consent
     case authorising
-    case failed(String)
     /// The extension was opened from Settings to finish setting it up.
     case info
   }
@@ -74,7 +73,6 @@ struct PasskeyConsentView: View {
 
   private var title: String {
     switch model.phase {
-    case .failed: return t("passkey.errorTitle", [:])
     case .info: return t("passkey.setup.title", [:])
     case .choosing: return t("pubky.selectPubky", [:])
     case .loading, .consent, .authorising: return t("auth.authorize", [:])
@@ -118,8 +116,6 @@ struct PasskeyConsentView: View {
     switch model.phase {
     case .loading:
       ProgressView().tint(RingColour.foreground).frame(maxWidth: .infinity, maxHeight: .infinity)
-    case .failed(let message):
-      messageLayout(message, button: t("common.close", [:]))
     case .info:
       messageLayout(t("passkey.setup.message", [:]), button: t("common.done", [:]))
     case .choosing:
