@@ -541,7 +541,16 @@
 			"client_id_mismatch": "La app indicada en la solicitud no coincide con el sitio web.",
 			"origin_mismatch": "El origen del navegador no coincide con el sitio web.",
 			"unknown_pubky": "Este pubky no está disponible en Pubky Ring.",
-			"invalid_link": "Pubky Ring no pudo leer la solicitud de inicio de sesión."
+			"invalid_link": "Pubky Ring no pudo leer la solicitud de inicio de sesión.",
+			"not_pubky_request": "Esta solicitud no es un inicio de sesión de Pubky.",
+			"no_pubkys": "Abre Pubky Ring y añade un pubky primero.",
+			"request_not_found": "Pubky Ring no encontró la solicitud de inicio de sesión. Vuelve al sitio web e inténtalo de nuevo.",
+			"ios_too_old": "Esta versión de iOS no pasó la solicitud de inicio de sesión a Pubky Ring. Se necesita iOS 18 o posterior.",
+			"secret_unavailable": "Pubky Ring no pudo leer la clave de este pubky. Abre Pubky Ring e inténtalo de nuevo."
+		},
+		"setup": {
+			"title": "Passkeys de Pubky Ring",
+			"message": "Pubky Ring ya puede iniciar sesión en sitios Pubky desde la hoja de passkeys. Abre Pubky Ring una vez para que pueda mostrar tus pubkys aquí."
 		},
 		"settings": {
 			"title": "INICIO DE SESIÓN CON PASSKEY",
