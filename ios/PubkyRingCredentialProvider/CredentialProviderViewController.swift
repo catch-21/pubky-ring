@@ -20,20 +20,30 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     let prfInput: Data?
   }
 
+  /// How long the success state shows before the sheet closes, as on Android (PASSKEY_SUCCESS_MS).
+  private static let successNanoseconds: UInt64 = 400_000_000
+
   private let model = PasskeyConsentModel()
   private var pending: PendingRequest?
   private var listRequest: ListRequest?
   private var isConfiguring = false
   private var hasFailed = false
+  private var isFinished = false
+  private var endSuccess: CheckedContinuation<Void, Never>?
 
   override func viewDidLoad() {
     super.viewDidLoad()
+    overrideUserInterfaceStyle = .dark
+    view.backgroundColor = .black
     let host = UIHostingController(
       rootView: PasskeyConsentView(
         model: model,
         onApprove: { [weak self] in self?.approve() },
         onDeny: { [weak self] in self?.deny() },
-        onChoose: { [weak self] in self?.choose(pubky: $0) }))
+        onChoose: { [weak self] in self?.choose(pubky: $0) },
+        onFinish: { [weak self] in self?.finishSuccess() }))
+    host.overrideUserInterfaceStyle = .dark
+    host.view.backgroundColor = .clear
     addChild(host)
     host.view.frame = view.bounds
     host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -52,7 +62,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     guard let request = credentialRequest as? ASPasskeyCredentialRequest,
       let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity,
       let pubky = String(data: identity.userHandle, encoding: .utf8)
-    else { return fail("This request is not a Pubky sign-in.") }
+    else { return fail(RingStrings.t("passkey.errors.not_pubky_request")) }
     var prfInput: Data?
     if #available(iOS 18.0, *) {
       if case .assertion(let input) = request.extensionInput {
@@ -75,14 +85,13 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
       rpId: requestParameters.relyingPartyIdentifier, clientDataHash: requestParameters.clientDataHash,
       allowedCredentials: requestParameters.allowedCredentials, prfInput: prfInput)
     guard let snapshot = PasskeySnapshot.load(), !snapshot.identities.isEmpty else {
-      return fail("Open Pubky Ring and add a pubky first.")
+      return fail(RingStrings.t("passkey.errors.no_pubkys"))
     }
     if snapshot.identities.count == 1 {
       return choose(pubky: snapshot.identities[0].pubky)
     }
-    model.choices = snapshot.identities.map {
-      (pubky: $0.pubky, name: $0.name.isEmpty ? PasskeyShared.shortPubky($0.pubky) : $0.name)
-    }
+    // On the identity path the OS has already picked the pubky; this list path has to ask.
+    model.choices = snapshot.identities.map(ConsentIdentity.init)
     model.phase = .choosing
   }
 
@@ -97,7 +106,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     model.phase = .loading
     Task { @MainActor in
       guard let snapshot = PasskeySnapshot.load(), let identity = snapshot.identity(for: pubky) else {
-        return fail("This pubky is no longer in Pubky Ring.")
+        return fail(RingStrings.t("passkey.errors.unknown_pubky"))
       }
       let envelopeBytes: Data
       if let fromAllowList = allowedCredentials.first(where: PasskeyEnvelope.hasMagic) {
@@ -106,40 +115,56 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         do {
           envelopeBytes = try await PasskeyMailbox.fetchEnvelope(prfInput: prfInput, rpId: rpId)
         } catch {
-          return fail("Pubky Ring could not find the sign-in request. Go back to the website and try again.")
+          return fail(RingStrings.t("passkey.errors.request_not_found"))
         }
       } else {
-        return fail("This version of iOS did not pass the sign-in request to Pubky Ring. iOS 18 or later is needed.")
+        return fail(RingStrings.t("passkey.errors.ios_too_old"))
       }
       let now = UInt32(Date().timeIntervalSince1970)
       switch PasskeyPolicy.validate(envelopeBytes: envelopeBytes, rpId: rpId, now: now, hasSeenNonce: PasskeyNonceCache.has) {
       case .failure(let reason):
-        fail(Self.message(for: reason))
+        fail(RingStrings.t("passkey.errors.\(reason.rawValue)"))
       case .success(let validated):
         pending = PendingRequest(
           rpId: rpId, clientDataHash: clientDataHash, identity: identity, snapshot: snapshot, validated: validated)
         model.rpId = rpId
-        model.pubky = identity.pubky
-        model.identityName = identity.name.isEmpty ? PasskeyShared.shortPubky(identity.pubky) : identity.name
-        model.capabilities = PasskeyConsentView.parseCapabilities(validated.link.capabilities)
+        model.relay = validated.link.relay
+        model.identity = ConsentIdentity(identity)
+        model.capabilities = AuthCapability.parse(validated.link.capabilities)
+        model.encryptionApproved = true
+        model.showDetails = snapshot.alwaysShowAuthDetails ?? false
         // Auto Auth is a development setting; it skips consent exactly as QR scanning does.
         if snapshot.autoAuth {
           approve()
         } else {
-          model.phase = .consent
+          showConsent()
         }
       }
     }
   }
 
+  private func showConsent() {
+    model.phase = .consent
+    let generation = model.consentGeneration
+    Task { @MainActor [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(PasskeyConsentView.consentTimeout * 1_000_000_000))
+      guard let self, self.model.phase == .consent, self.model.consentGeneration == generation else { return }
+      self.deny()
+    }
+  }
+
   private func approve() {
-    guard let pending, model.phase != .authorising else { return }
+    guard let pending, model.phase == .consent || model.phase == .loading, !isFinished else { return }
     model.phase = .authorising
+    // As on Android: the approved scopes are sent only when the user had an encryption choice.
+    let capabilities =
+      AuthCapability.hasEncryption(model.capabilities)
+      ? AuthCapability.serialise(model.approvedCapabilities) : pending.validated.link.capabilities ?? ""
     Task { @MainActor in
       do {
         let envelope = pending.validated.envelope
         let userVerified = try await PasskeyApprover.approve(
-          url: envelope.url, identity: pending.identity, capabilities: pending.validated.link.capabilities ?? "",
+          url: envelope.url, identity: pending.identity, capabilities: capabilities,
           requireDeviceAuth: pending.snapshot.requireDeviceAuth)
         PasskeyNonceCache.remember(envelope.nonce, until: envelope.exp)
         let credentialId = PasskeyShared.credentialId(rpId: pending.rpId, pubky: pending.identity.pubky)
@@ -149,13 +174,36 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         let credential = ASPasskeyAssertionCredential(
           userHandle: Data(pending.identity.pubky.utf8), relyingParty: pending.rpId, signature: signature,
           clientDataHash: pending.clientDataHash, authenticatorData: authenticatorData, credentialID: credentialId)
+        // The grant is already with the website; show Ring's success state before handing back.
+        model.phase = .authorised
+        await showSuccess()
+        isFinished = true
         extensionContext.completeAssertionRequest(using: credential) { _ in }
       } catch PasskeyApprover.Failure.deviceAuthFailed {
-        model.phase = .consent
+        showConsent()
+      } catch PasskeyApprover.Failure.secretUnavailable {
+        fail(RingStrings.t("passkey.errors.secret_unavailable"))
+      } catch PasskeyApprover.Failure.authFailed(let message) {
+        fail(message.isEmpty ? RingStrings.t("passkey.errors.generic") : message)
       } catch {
-        fail(error.localizedDescription)
+        fail(RingStrings.t("passkey.errors.generic"))
       }
     }
+  }
+
+  private func showSuccess() async {
+    await withCheckedContinuation { continuation in
+      endSuccess = continuation
+      Task { @MainActor [weak self] in
+        try? await Task.sleep(nanoseconds: Self.successNanoseconds)
+        self?.finishSuccess()
+      }
+    }
+  }
+
+  private func finishSuccess() {
+    endSuccess?.resume()
+    endSuccess = nil
   }
 
   private func deny() {
@@ -163,22 +211,14 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
       extensionContext.completeExtensionConfigurationRequest()
       return
     }
+    guard !isFinished, model.phase != .authorised else { return }
+    isFinished = true
     extensionContext.cancelRequest(withError: ASExtensionError(hasFailed ? .failed : .userCanceled))
   }
 
   private func fail(_ message: String) {
     hasFailed = true
     model.phase = .failed(message)
-  }
-
-  private static func message(for reason: PasskeyPolicy.Rejection) -> String {
-    switch reason {
-    case .expired, .lifetime: return "This sign-in request has expired. Go back to the website and try again."
-    case .replayed: return "This sign-in request was already used."
-    case .clientIdMismatch, .originMismatch: return "The app named in the request does not match the website."
-    case .insecureRelay: return "The request uses an insecure relay."
-    case .unsupportedLink, .malformed: return "Pubky Ring does not support this sign-in request."
-    }
   }
 
   // MARK: Registration (PLAN.md section 4.6)
@@ -221,7 +261,6 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
 
   override func prepareInterfaceForExtensionConfiguration() {
     isConfiguring = true
-    model.phase = .info(
-      "Pubky Ring can now sign you in to Pubky websites from the passkey sheet. Open Pubky Ring once so it can list your pubkys here.")
+    model.phase = .info
   }
 }

@@ -43,6 +43,16 @@ end
 group.new_reference('Info.plist')
 group.new_reference("#{TARGET_NAME}.entitlements")
 
+# The consent sheet draws Ring's fonts, shield and translations from the extension bundle.
+resources = group.new_group('Resources')
+%w[Regular Medium SemiBold Bold].each do |weight|
+  extension.add_resources([resources.new_reference("../../assets/fonts/InterTight-#{weight}.ttf")])
+end
+extension.add_resources([resources.new_reference('../../src/images/shield.png')])
+%w[en es].each do |language|
+  extension.add_resources([resources.new_reference("../../src/i18n/locales/#{language}.json")])
+end
+
 # PubkyCore: the uniffi Swift bindings compile into the extension. Link the static
 # library directly. Adding the xcframework copies its module map into the shared
 # build include directory and redefines pubkycoreFFI for the app target.

@@ -63,12 +63,15 @@ struct PasskeySnapshot: Decodable {
     let pubky: String
     let storeKey: String
     let name: String
+    /// Ring's display name (getPubkyName); absent in snapshots from older app builds.
+    let displayName: String?
     let sourceApp: String?
   }
 
   let version: Int
   let autoAuth: Bool
   let requireDeviceAuth: Bool
+  let alwaysShowAuthDetails: Bool?
   let knownRpIds: [String]
   let identities: [Identity]
 
