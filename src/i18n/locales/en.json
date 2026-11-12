@@ -523,5 +523,43 @@
 		"signOutAction": "Sign out",
 		"signedOut": "Signed out",
 		"cleanupPending": "Some earlier Ring access could not be revoked."
+	},
+	"passkey": {
+		"consentTitle": "Sign in with Pubky Ring",
+		"requestingSite": "REQUESTING SITE",
+		"verifiedByBrowser": "Your browser confirmed this request comes from this site.",
+		"errorTitle": "Sign-in request refused",
+		"errors": {
+			"generic": "Pubky Ring could not complete this sign-in.",
+			"malformed": "The sign-in request is malformed.",
+			"expired": "The sign-in request has expired. Try again from the website.",
+			"lifetime": "The sign-in request is valid for too long.",
+			"replayed": "This sign-in request has already been used.",
+			"unsupported_link": "This sign-in request type is not supported for passkey sign-in.",
+			"insecure_relay": "The sign-in request uses an insecure relay.",
+			"client_id_mismatch": "The app named in the request does not match the website.",
+			"origin_mismatch": "The browser origin does not match the website.",
+			"unknown_pubky": "This pubky is not available in Pubky Ring.",
+			"invalid_link": "Pubky Ring could not read the sign-in request.",
+			"not_pubky_request": "This request is not a Pubky sign-in.",
+			"no_pubkys": "Open Pubky Ring and add a pubky first.",
+			"request_not_found": "Pubky Ring could not find the sign-in request. Go back to the website and try again.",
+			"ios_too_old": "This version of iOS did not pass the sign-in request to Pubky Ring. iOS 18 or later is needed.",
+			"secret_unavailable": "Pubky Ring could not read this pubky's key. Open Pubky Ring and try again."
+		},
+		"setup": {
+			"title": "Pubky Ring passkeys",
+			"message": "Pubky Ring can now sign you in to Pubky websites from the passkey sheet. Open Pubky Ring once so it can list your pubkys here."
+		},
+		"settings": {
+			"title": "PASSKEY SIGN-IN",
+			"description": "Sign in to Pubky websites from the passkey sheet in your browser. Turn on Pubky Ring as a passkey provider.",
+			"enabled": "Pubky Ring is turned on as a passkey provider.",
+			"disabled": "Pubky Ring is turned off as a passkey provider.",
+			"androidHint": "Choose Pubky Ring under Passwords, passkeys & accounts.",
+			"iosHint": "Turn on Pubky Ring under AutoFill & Passwords.",
+			"iosPrfMissing": "Passkey sign-in on websites works best on iOS 18 or later.",
+			"open": "Open passkey settings"
+		}
 	}
 }

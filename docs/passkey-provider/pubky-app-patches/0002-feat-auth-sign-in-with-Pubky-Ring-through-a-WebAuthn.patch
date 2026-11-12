@@ -1,0 +1,1073 @@
+From 8c6a1c1c8d30c6cb7c6f45bb604345ed776d0277 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Wed, 11 Nov 2026 10:52:49 +0000
+Subject: [PATCH 2/6] feat(auth): sign in with Pubky Ring through a WebAuthn
+ passkey request
+
+The page hands Ring a signin_grant request inside a WebAuthn challenge (or an
+encrypted PRF mailbox on iOS 18). The browser verifies the origin, Ring checks
+cid against it, approves on the relay as usual, and the page adopts the session
+only when the passkey's userHandle names the approving pubky.
+---
+ src/config/passkey.ts                         |  24 +++
+ src/core/controllers/auth/auth.ts             |  21 +-
+ src/core/services/homeserver/grant-flow.ts    |  17 +-
+ .../usePasskeyAuth/usePasskeyAuth.test.tsx    | 118 +++++++++++
+ src/hooks/usePasskeyAuth/usePasskeyAuth.tsx   | 188 ++++++++++++++++++
+ .../usePasskeyAuth/usePasskeyAuth.types.ts    |  26 +++
+ src/libs/passkey/__fixtures__/vectors.json    |  28 +++
+ src/libs/passkey/association.ts               |  29 +++
+ src/libs/passkey/envelope.ts                  |  53 +++++
+ src/libs/passkey/mailbox.ts                   |  81 ++++++++
+ src/libs/passkey/passkey.test.ts              | 174 ++++++++++++++++
+ src/libs/passkey/passkey.ts                   | 158 +++++++++++++++
+ 12 files changed, 913 insertions(+), 4 deletions(-)
+ create mode 100644 src/config/passkey.ts
+ create mode 100644 src/hooks/usePasskeyAuth/usePasskeyAuth.test.tsx
+ create mode 100644 src/hooks/usePasskeyAuth/usePasskeyAuth.tsx
+ create mode 100644 src/hooks/usePasskeyAuth/usePasskeyAuth.types.ts
+ create mode 100644 src/libs/passkey/__fixtures__/vectors.json
+ create mode 100644 src/libs/passkey/association.ts
+ create mode 100644 src/libs/passkey/envelope.ts
+ create mode 100644 src/libs/passkey/mailbox.ts
+ create mode 100644 src/libs/passkey/passkey.test.ts
+ create mode 100644 src/libs/passkey/passkey.ts
+
+diff --git a/src/config/passkey.ts b/src/config/passkey.ts
+new file mode 100644
+index 00000000..a2b6c7ba
+--- /dev/null
++++ b/src/config/passkey.ts
+@@ -0,0 +1,24 @@
++/**
++ * Passkey sign-in with Pubky Ring as the OS passkey provider. Design and decisions:
++ * pubky-ring docs/passkey-provider/PLAN.md (section 14).
++ */
++
++/** How long Ring accepts the envelope. Ring refuses anything longer than 300 s. */
++export const PASSKEY_ENVELOPE_LIFETIME_S = 120;
++
++/** WebAuthn get() timeout. Covers the OS sheet, Ring's consent screen and the relay post. */
++export const PASSKEY_CEREMONY_TIMEOUT_MS = 120_000;
++
++/** Query parameter that forces the iOS 17 `allowCredentials` request route (debug only). */
++export const PASSKEY_ROUTE_QUERY = 'ringTransport';
++
++/** Query parameter or localStorage key that turns passkey sign-in off and restores the deep link. */
++export const PASSKEY_DISABLE_QUERY = 'ringPasskey';
++export const PASSKEY_DISABLE_STORAGE_KEY = 'pubky-ring-passkey-disabled';
++
++/**
++ * WebAuthn rpId and Pubky client ID for the passkey path. Ring requires `cid` to equal the
++ * rpId exactly (decision 4), so both are the page's own host.
++ */
++export const getPasskeyRpId = (): string => window.location.hostname;
++export const getPasskeyClientId = (): string => getPasskeyRpId();
+diff --git a/src/core/controllers/auth/auth.ts b/src/core/controllers/auth/auth.ts
+index d299dbd1..3453b8bd 100644
+--- a/src/core/controllers/auth/auth.ts
++++ b/src/core/controllers/auth/auth.ts
+@@ -1205,7 +1205,26 @@ export class AuthController {
+     );
+   }
+
+-  /** Completes the specific Passport approval after its hook has stopped the popup timers. */
++  /**
++   * Generates the sign-in request handed to Pubky Ring through a WebAuthn passkey request.
++   * Adoption is deferred like Passport's: the caller first checks that the passkey's userHandle
++   * names the pubky that approved, then calls `initializeAuthenticatedSession`.
++   */
++  static async getPasskeyAuthUrl(): Promise<TGenerateAuthUrlResult> {
++    const state = useAuthStore.getState();
++    return this.wrapAuthFlow(
++      {
++        purpose: 'signin',
++        capabilities: getHomeserverCapabilities(),
++        generation: state.generation,
++        fresh: true,
++        passkey: true,
++      },
++      true,
++    );
++  }
++
++  /** Completes the specific Passport or passkey approval after its hook has run its own checks. */
+   static async initializeAuthenticatedSession({ session }: THomeserverSessionResult): Promise<void> {
+     const adopt = this.pendingSessionAdoptions.get(session);
+     this.pendingSessionAdoptions.delete(session);
+diff --git a/src/core/services/homeserver/grant-flow.ts b/src/core/services/homeserver/grant-flow.ts
+index 1be8c901..1070530e 100644
+--- a/src/core/services/homeserver/grant-flow.ts
++++ b/src/core/services/homeserver/grant-flow.ts
+@@ -10,6 +10,7 @@ import {
+ import { z } from 'zod';
+ import { getAuthClientId } from '@/config/auth';
+ import { getDefaultHttpRelay, getDeployEnv, getHomeserver, getTestnet } from '@/config/network';
++import { getPasskeyClientId } from '@/config/passkey';
+ import { createCanceledError } from '@/libs/error/auth-flow-canceled';
+ import { isIosDevice } from '@/libs/pwa/platform';
+ import { isPubkyErrorLike } from './error.utils';
+@@ -37,6 +38,12 @@ export interface GrantFlowRequest {
+   inviteCode?: string;
+   fresh?: boolean;
+   xCallback?: XCallbackParams;
++  /**
++   * Passkey sign-in through Pubky Ring as the OS passkey provider. The link is handed to Ring
++   * inside a WebAuthn request, so it uses signed approvals (no client secret in the link) and the
++   * page host as client ID, which Ring requires to equal the browser-verified rpId.
++   */
++  passkey?: boolean;
+ }
+
+ type PendingRecord = z.infer<typeof pendingSchema>;
+@@ -131,13 +138,15 @@ export class GrantFlowService {
+     const inviteHash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', inviteBytes)), (b) =>
+       b.toString(16).padStart(2, '0'),
+     ).join('');
++    const clientId = request.passkey ? getPasskeyClientId() : getAuthClientId();
+     const context = JSON.stringify({
+       purpose: request.purpose,
+       xCallback: request.xCallback,
+       capabilities: request.capabilities,
+       expectedPubky: request.expectedPubky,
+       generation: request.generation,
+-      clientId: getAuthClientId(),
++      clientId,
++      passkey: request.passkey === true,
+       homeserver: getHomeserver(),
+       environment: getDeployEnv(),
+       testnet: getTestnet(),
+@@ -164,7 +173,8 @@ export class GrantFlowService {
+       const tabRecord = this.read();
+       // Only delegated sign-in can recover across a process restart. Local keys and popup/signup/upgrade
+       // attempts retain their existing tab-scoped lifetime and binding.
+-      const durable = request.purpose === 'signin' && !request.xCallback;
++      // A passkey request is bound to one WebAuthn ceremony, so it is never resumed after a reload.
++      const durable = request.purpose === 'signin' && !request.xCallback && !request.passkey;
+       let saved = !request.fresh && canResume(tabRecord, context) ? tabRecord : null;
+       if (durable) {
+         const candidates = await PendingGrantStore.getCandidates(context, previous?.id ?? tabRecord?.id);
+@@ -277,9 +287,10 @@ export class GrantFlowService {
+             ? AuthFlowKind.signup(PublicKey.from(getHomeserver()), request.inviteCode)
+             : AuthFlowKind.signin();
+         flow = await sdk.startGrantAuthFlow(request.capabilities, kind, {
+-          clientId: getAuthClientId(),
++          clientId,
+           relay: getDefaultHttpRelay(),
+           xCallback: request.xCallback,
++          ...(request.passkey ? { approvalFormat: 'signedApprovalV1' as const } : {}),
+         });
+         assertCurrent();
+         try {
+diff --git a/src/hooks/usePasskeyAuth/usePasskeyAuth.test.tsx b/src/hooks/usePasskeyAuth/usePasskeyAuth.test.tsx
+new file mode 100644
+index 00000000..6e5919e8
+--- /dev/null
++++ b/src/hooks/usePasskeyAuth/usePasskeyAuth.test.tsx
+@@ -0,0 +1,118 @@
++import { act, renderHook, waitFor } from '@testing-library/react';
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { PasskeyCeremonyError } from '@/libs/passkey/passkey';
++import { toast } from '@/molecules/Toaster/toast';
++import { mockRingSession } from '@/test-utils/pubky';
++import { usePasskeyAuth } from './usePasskeyAuth';
++
++const mockGetPasskeyAuthUrl = vi.fn();
++const mockInitializeAuthenticatedSession = vi.fn();
++const mockPrepare = vi.fn();
++const mockGetAssertion = vi.fn();
++const mockIsIos = vi.fn(() => false);
++
++vi.mock('@/molecules/Toaster/toast');
++vi.mock('@/config/network', () => ({ getDefaultHttpRelay: () => 'https://relay.example.com/inbox' }));
++vi.mock('@/libs/pwa/platform', () => ({ isIosDevice: () => mockIsIos(), isAndroidIntentDevice: () => true }));
++vi.mock('@/controllers/auth/auth', () => ({
++  AuthController: {
++    getPasskeyAuthUrl: (...args: unknown[]) => mockGetPasskeyAuthUrl(...args),
++    initializeAuthenticatedSession: (...args: unknown[]) => mockInitializeAuthenticatedSession(...args),
++  },
++}));
++vi.mock('@/libs/passkey/passkey', async () => {
++  const actual = await vi.importActual<typeof import('@/libs/passkey/passkey')>('@/libs/passkey/passkey');
++  return {
++    ...actual,
++    isPasskeySignInSupported: () => true,
++    preparePasskeyRequest: (...args: unknown[]) => mockPrepare(...args),
++    getPasskeyAssertion: (...args: unknown[]) => mockGetAssertion(...args),
++  };
++});
++
++const PUBKY = 'o1gg96ewuojmopcjbz8895478wdtxtzzuxnfjjz8o8e77csa1ngo';
++
++const startFlow = (session = mockRingSession(['/pub/pubky.app/:rw'], PUBKY)) => {
++  const cancelAuthFlow = vi.fn();
++  mockGetPasskeyAuthUrl.mockResolvedValue({
++    authorizationUrl: 'pubkyauth://signin_grant?cid=demo.example',
++    awaitApproval: Promise.resolve(session),
++    cancelAuthFlow,
++  });
++  return { cancelAuthFlow, session };
++};
++
++describe('usePasskeyAuth', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++    mockPrepare.mockResolvedValue({ options: {}, envelope: new Uint8Array() });
++    mockInitializeAuthenticatedSession.mockResolvedValue(undefined);
++  });
++
++  it('adopts the session when the passkey names the approving pubky', async () => {
++    const { session } = startFlow();
++    mockGetAssertion.mockResolvedValue({ pubky: PUBKY, credentialId: 'abc' });
++    const onAttemptSettled = vi.fn();
++    const { result } = renderHook(() => usePasskeyAuth({ onAttemptSettled }));
++    await waitFor(() => expect(result.current.isSupported).toBe(true));
++
++    act(() => result.current.startPasskeyAuth());
++
++    await waitFor(() => expect(onAttemptSettled).toHaveBeenCalledWith('session'));
++    expect(mockPrepare).toHaveBeenCalledWith({
++      authorizationUrl: 'pubkyauth://signin_grant?cid=demo.example',
++      relay: 'https://relay.example.com/inbox',
++    });
++    expect(mockInitializeAuthenticatedSession).toHaveBeenCalledWith({ session });
++    expect(result.current.isPending).toBe(false);
++  });
++
++  it('refuses a session approved by a different pubky', async () => {
++    const { cancelAuthFlow } = startFlow(mockRingSession(['/pub/pubky.app/:rw'], 'attacker-pubky'));
++    mockGetAssertion.mockResolvedValue({ pubky: PUBKY, credentialId: 'abc' });
++    const onAttemptSettled = vi.fn();
++    const { result } = renderHook(() => usePasskeyAuth({ onAttemptSettled }));
++
++    act(() => result.current.startPasskeyAuth());
++
++    await waitFor(() => expect(onAttemptSettled).toHaveBeenCalledWith('failed'));
++    expect(mockInitializeAuthenticatedSession).not.toHaveBeenCalled();
++    expect(cancelAuthFlow).toHaveBeenCalled();
++    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'error' }));
++  });
++
++  it('reports a cancelled sheet so the page can offer the deep link again', async () => {
++    const { cancelAuthFlow } = startFlow();
++    mockGetAssertion.mockRejectedValue(new PasskeyCeremonyError('cancelled', 'NotAllowedError'));
++    const onAttemptSettled = vi.fn();
++    const { result } = renderHook(() => usePasskeyAuth({ onAttemptSettled }));
++
++    act(() => result.current.startPasskeyAuth());
++
++    await waitFor(() => expect(onAttemptSettled).toHaveBeenCalledWith('cancelled'));
++    expect(cancelAuthFlow).toHaveBeenCalled();
++    expect(mockInitializeAuthenticatedSession).not.toHaveBeenCalled();
++  });
++
++  it('asks for a second tap when Safari refuses the call outside the gesture', async () => {
++    mockIsIos.mockReturnValue(true);
++    const { session } = startFlow();
++    mockGetAssertion
++      .mockRejectedValueOnce(new PasskeyCeremonyError('cancelled', 'NotAllowedError'))
++      .mockResolvedValueOnce({ pubky: PUBKY, credentialId: 'abc' });
++    const onAttemptSettled = vi.fn();
++    const { result } = renderHook(() => usePasskeyAuth({ onAttemptSettled }));
++
++    act(() => result.current.startPasskeyAuth());
++    await waitFor(() => expect(result.current.needsTap).toBe(true));
++    expect(onAttemptSettled).not.toHaveBeenCalled();
++
++    act(() => result.current.continuePasskeyAuth());
++
++    await waitFor(() => expect(onAttemptSettled).toHaveBeenCalledWith('session'));
++    expect(mockPrepare).toHaveBeenCalledTimes(1);
++    expect(mockGetAssertion).toHaveBeenCalledTimes(2);
++    expect(mockInitializeAuthenticatedSession).toHaveBeenCalledWith({ session });
++    mockIsIos.mockReturnValue(false);
++  });
++});
+diff --git a/src/hooks/usePasskeyAuth/usePasskeyAuth.tsx b/src/hooks/usePasskeyAuth/usePasskeyAuth.tsx
+new file mode 100644
+index 00000000..6b82a4f1
+--- /dev/null
++++ b/src/hooks/usePasskeyAuth/usePasskeyAuth.tsx
+@@ -0,0 +1,188 @@
++'use client';
++
++import { useEffect, useRef, useState } from 'react';
++import type { Session } from '@synonymdev/pubky';
++import { getDefaultHttpRelay } from '@/config/network';
++import { AuthController } from '@/controllers/auth/auth';
++import { isAuthApprovalMismatchError, isAuthFlowCanceledError } from '@/libs/error/auth-flow-canceled';
++import { isAppError, isWrongEnvironmentHomeserverError } from '@/libs/error/error.utils';
++import { Logger } from '@/libs/logger/logger';
++import {
++  getPasskeyAssertion,
++  isPasskeySignInSupported,
++  PasskeyCeremonyError,
++  type PasskeyRequest,
++  preparePasskeyRequest,
++} from '@/libs/passkey/passkey';
++import { isIosDevice } from '@/libs/pwa/platform';
++import { toast } from '@/molecules/Toaster/toast';
++import type { PasskeyAttemptResult, UsePasskeyAuthOptions, UsePasskeyAuthReturn } from './usePasskeyAuth.types';
++
++/** Ring posts the approval before it returns the assertion; allow for relay latency after that. */
++export const PASSKEY_APPROVAL_GRACE_MS = 30_000;
++/** A NotAllowedError this fast on iOS means Safari refused the call, not that the user cancelled. */
++const IOS_GESTURE_REFUSAL_MS = 1_500;
++
++type Attempt = {
++  request: PasskeyRequest;
++  awaitApproval: Promise<Session>;
++  cancelAuthFlow: () => void;
++};
++
++const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> =>
++  new Promise<T>((resolve, reject) => {
++    const timer = setTimeout(() => reject(new Error('Timed out waiting for the Pubky Ring approval')), ms);
++    promise.then(
++      (value) => {
++        clearTimeout(timer);
++        resolve(value);
++      },
++      (error: unknown) => {
++        clearTimeout(timer);
++        reject(error);
++      },
++    );
++  });
++
++/**
++ * Sign in with Pubky Ring through the OS passkey sheet (pubky-ring docs/passkey-provider/PLAN.md).
++ * The WebAuthn ceremony only carries the request to Ring and proves which pubky the user picked;
++ * the session still comes from the Pubky grant on the relay, exactly as with a QR scan.
++ */
++export function usePasskeyAuth(options: UsePasskeyAuthOptions = {}): UsePasskeyAuthReturn {
++  const [isSupported, setIsSupported] = useState(false);
++  const [isPending, setIsPending] = useState(false);
++  const [needsTap, setNeedsTap] = useState(false);
++  const attemptRef = useRef<Attempt | null>(null);
++  const nextIdRef = useRef(0);
++  const onAttemptSettledRef = useRef(options.onAttemptSettled);
++
++  useEffect(() => {
++    onAttemptSettledRef.current = options.onAttemptSettled;
++  }, [options.onAttemptSettled]);
++
++  useEffect(() => {
++    setIsSupported(isPasskeySignInSupported());
++    return () => {
++      attemptRef.current?.cancelAuthFlow();
++      attemptRef.current = null;
++    };
++  }, []);
++
++  const isCurrent = (attempt: Attempt) => attemptRef.current === attempt;
++
++  const settle = (attempt: Attempt, result: PasskeyAttemptResult) => {
++    if (!isCurrent(attempt)) return;
++    attemptRef.current = null;
++    setNeedsTap(false);
++    setIsPending(false);
++    if (result === 'failed' || result === 'cancelled') attempt.cancelAuthFlow();
++    onAttemptSettledRef.current?.(result);
++  };
++
++  const runCeremony = async (attempt: Attempt) => {
++    const startedAt = Date.now();
++    try {
++      const assertion = await getPasskeyAssertion(attempt.request);
++      if (!isCurrent(attempt)) return;
++      const session = await withTimeout(attempt.awaitApproval, PASSKEY_APPROVAL_GRACE_MS);
++      if (!isCurrent(attempt)) return;
++      // A provider that saw the request could race a forged approval for its own key onto the relay.
++      // Only accept the session if the pubky that approved is the one the user picked in the OS sheet.
++      if (session.info.publicKey.z32() !== assertion.pubky) {
++        toast({ variant: 'error', description: 'Pubky Ring approved with a different key. Try again.' });
++        settle(attempt, 'failed');
++        return;
++      }
++      await AuthController.initializeAuthenticatedSession({ session });
++      settle(attempt, 'session');
++    } catch (error) {
++      if (!isCurrent(attempt)) return;
++      if (
++        error instanceof PasskeyCeremonyError &&
++        error.reason === 'cancelled' &&
++        isIosDevice() &&
++        Date.now() - startedAt < IOS_GESTURE_REFUSAL_MS
++      ) {
++        setNeedsTap(true);
++        return;
++      }
++      if (isAuthFlowCanceledError(error)) {
++        settle(attempt, 'superseded');
++        return;
++      }
++      if (error instanceof PasskeyCeremonyError && error.reason === 'cancelled') {
++        toast({
++          variant: 'info',
++          description: 'Passkey sign-in was cancelled, or Pubky Ring is not set up as a passkey provider.',
++        });
++        settle(attempt, 'cancelled');
++        return;
++      }
++      if (!(error instanceof PasskeyCeremonyError) && !isAppError(error)) {
++        Logger.error('Passkey sign-in failed:', error);
++      }
++      toast({
++        variant: 'error',
++        description: isWrongEnvironmentHomeserverError(error)
++          ? 'This account is linked to a different homeserver. Use a staging account on this site.'
++          : isAuthApprovalMismatchError(error)
++            ? 'Approve with the account you are signed in with.'
++            : error instanceof PasskeyCeremonyError && error.reason === 'mailbox'
++              ? 'Could not reach the Pubky relay. Check your connection and try again.'
++              : 'Passkey sign-in failed. Try again.',
++      });
++      settle(attempt, 'failed');
++    }
++  };
++
++  const startPasskeyAuth = () => {
++    if (attemptRef.current || isPending) return;
++    const id = ++nextIdRef.current;
++    const isLatest = () => nextIdRef.current === id;
++    setIsPending(true);
++    setNeedsTap(false);
++    void (async () => {
++      let flow: Awaited<ReturnType<typeof AuthController.getPasskeyAuthUrl>> | null = null;
++      try {
++        flow = await AuthController.getPasskeyAuthUrl();
++        void flow.awaitApproval.catch(() => undefined);
++        const request = await preparePasskeyRequest({
++          authorizationUrl: flow.authorizationUrl,
++          relay: getDefaultHttpRelay(),
++        });
++        if (!isLatest()) {
++          flow.cancelAuthFlow();
++          return;
++        }
++        const attempt: Attempt = { request, awaitApproval: flow.awaitApproval, cancelAuthFlow: flow.cancelAuthFlow };
++        attemptRef.current = attempt;
++        await runCeremony(attempt);
++      } catch (error) {
++        if (!isLatest()) return;
++        flow?.cancelAuthFlow();
++        setIsPending(false);
++        const superseded = isAuthFlowCanceledError(error);
++        if (!superseded) {
++          toast({
++            variant: 'error',
++            description:
++              error instanceof PasskeyCeremonyError && error.reason === 'mailbox'
++                ? 'Could not reach the Pubky relay. Check your connection and try again.'
++                : 'Could not start passkey sign-in. Try again.',
++          });
++        }
++        onAttemptSettledRef.current?.(superseded ? 'superseded' : 'failed');
++      }
++    })();
++  };
++
++  const continuePasskeyAuth = () => {
++    const attempt = attemptRef.current;
++    if (!attempt || !needsTap) return;
++    setNeedsTap(false);
++    void runCeremony(attempt);
++  };
++
++  return { isSupported, startPasskeyAuth, continuePasskeyAuth, needsTap, isPending };
++}
+diff --git a/src/hooks/usePasskeyAuth/usePasskeyAuth.types.ts b/src/hooks/usePasskeyAuth/usePasskeyAuth.types.ts
+new file mode 100644
+index 00000000..2fbe456a
+--- /dev/null
++++ b/src/hooks/usePasskeyAuth/usePasskeyAuth.types.ts
+@@ -0,0 +1,26 @@
++/**
++ * How one passkey attempt ended. Only `failed` and `cancelled` mean the user should be offered
++ * another way in (for example regenerating the Ring deep link on `/sign-in`).
++ */
++export type PasskeyAttemptResult = 'session' | 'failed' | 'cancelled' | 'superseded';
++
++export type UsePasskeyAuthOptions = {
++  /** Called once when an attempt settles. */
++  onAttemptSettled?: (result: PasskeyAttemptResult) => void;
++};
++
++export type UsePasskeyAuthReturn = {
++  /** True when this browser can offer Pubky Ring through the OS passkey sheet. */
++  isSupported: boolean;
++  /** Start one attempt from a click handler. */
++  startPasskeyAuth: () => void;
++  /**
++   * Safari can refuse a WebAuthn call that no longer counts as part of the tap. The prepared
++   * request is then kept and this re-runs it from a new tap.
++   */
++  continuePasskeyAuth: () => void;
++  /** True while a prepared request is waiting for that second tap. */
++  needsTap: boolean;
++  /** True from the click until the attempt settles. */
++  isPending: boolean;
++};
+diff --git a/src/libs/passkey/__fixtures__/vectors.json b/src/libs/passkey/__fixtures__/vectors.json
+new file mode 100644
+index 00000000..c62fe155
+--- /dev/null
++++ b/src/libs/passkey/__fixtures__/vectors.json
+@@ -0,0 +1,28 @@
++{
++  "description": "Pubky WebAuthn envelope and iOS PRF mailbox vectors. Regenerate with node scripts/passkey/generate-vectors.js.",
++  "envelope": {
++    "input": {
++      "version": 1,
++      "flags": 0,
++      "exp": 1893456000,
++      "nonce": "101112131415161718191a1b1c1d1e1f",
++      "url": "pubkyauth://signin_grant?caps=%2Fpub%2Fpubky.app%2F%3Arw&relay=https%3A%2F%2Fhttprelay.staging.pubky.app%2Finbox&cid=pubky-ring-demo.vercel.app&cpk=qdw49yskax4cd33s85ojn45qom1hb7unn77d1eou3shnnjd95phy&af=v1&epk=kN-sSW2BOQClhwV8qF4DVOq9xrQHJvhvF-zU_W-KbTQ"
++    },
++    "hex": "504b59574131010070dbd880101112131415161718191a1b1c1d1e1f00fe7075626b79617574683a2f2f7369676e696e5f6772616e743f636170733d2532467075622532467075626b792e61707025324625334172772672656c61793d68747470732533412532462532466874747072656c61792e73746167696e672e7075626b792e617070253246696e626f78266369643d7075626b792d72696e672d64656d6f2e76657263656c2e6170702663706b3d716477343979736b617834636433337338356f6a6e3435716f6d31686237756e6e37376431656f753373686e6e6a6439357068792661663d76312665706b3d6b4e2d73535732424f51436c6877563871463444564f7139787251484a766876462d7a555f572d4b625451",
++    "base64url": "UEtZV0ExAQBw29iAEBESExQVFhcYGRobHB0eHwD-cHVia3lhdXRoOi8vc2lnbmluX2dyYW50P2NhcHM9JTJGcHViJTJGcHVia3kuYXBwJTJGJTNBcncmcmVsYXk9aHR0cHMlM0ElMkYlMkZodHRwcmVsYXkuc3RhZ2luZy5wdWJreS5hcHAlMkZpbmJveCZjaWQ9cHVia3ktcmluZy1kZW1vLnZlcmNlbC5hcHAmY3BrPXFkdzQ5eXNrYXg0Y2QzM3M4NW9qbjQ1cW9tMWhiN3Vubjc3ZDFlb3Uzc2hubmpkOTVwaHkmYWY9djEmZXBrPWtOLXNTVzJCT1FDbGh3VjhxRjREVk9xOXhyUUhKdmh2Ri16VV9XLUtiVFE"
++  },
++  "mailbox": {
++    "rpId": "pubky-ring-demo.vercel.app",
++    "prfInputHex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
++    "prfSaltHex": "4b59077d71337950ef366a420b3342a5ac28e7812b179299bcd2fb2c55699ed8",
++    "keyHex": "16d13018b07017ee532b0f10ba0a9dce756071181f21d7477fcc4a795a3e52f5",
++    "channel": "O5XHN2uPgBQsCFHuip1-hJZBSObw4il6oF-oIQ1sMFI",
++    "gcmNonceHex": "404142434445464748494a4b",
++    "bodyHex": "404142434445464748494a4b5abf0533686d6fa1f1f8d0e2614e13e43c51db4e36e3fe16a98b48cbb567ae51056f79f6e792b670ff1c988aa54f9f2c47cac018739b31a5fcd11f7b05ef227c3aa761374aafc2ce1c6f599c23674c962faf2a4bde3df30f94a95df0c85d84f242bc8c69be518c78b60ebf8f74b6198b853c5d0c567452e3dfa6a650d99c0586c9ebf328e4c6bc7e2d1f2c63b8aeebcef9503e73080aeabcd94e8485a37303b4797970327237519c2463a5813f2ab8703378f2e41a532ba6596605bd5e0ed54e1317b072d724decb74e775eb908e8c1966e8e64293639cf59f20e1b49e7c2315194e978636851b9f48bcda1339cba91fbe61135880603821028e9198620211326b34cd846e26c03ab1b6de76ec8ead120a7a8a5c1743229f64827c74e1e158c2eb65615770ce1c9d89cd40cf"
++  },
++  "credentialId": {
++    "rpId": "pubky-ring-demo.vercel.app",
++    "pubky": "o1gg96ewuojmopcjbz8895478wdtxtzzuxnfjjz8o8e77csa1ngo",
++    "hex": "5d5fba5f8ad0329fdda63a943418742a"
++  }
++}
+diff --git a/src/libs/passkey/association.ts b/src/libs/passkey/association.ts
+new file mode 100644
+index 00000000..f1b6d884
+--- /dev/null
++++ b/src/libs/passkey/association.ts
+@@ -0,0 +1,29 @@
++type Env = Record<string, string | undefined>;
++
++const list = (value: string | undefined): string[] =>
++  (value ?? '')
++    .split(',')
++    .map((item) => item.trim())
++    .filter(Boolean);
++
++/** Pubky Ring's Android application ID. */
++export const DEFAULT_ANDROID_PACKAGE = 'to.pubky.ring';
++
++export function getPasskeyAssetLinks(env: Env) {
++  const fingerprints = list(env.PASSKEY_ANDROID_CERT_SHA256).map((fingerprint) => fingerprint.toUpperCase());
++  if (fingerprints.length === 0) return [];
++  return [
++    {
++      relation: ['delegate_permission/common.get_login_creds'],
++      target: {
++        namespace: 'android_app',
++        package_name: env.PASSKEY_ANDROID_PACKAGE?.trim() || DEFAULT_ANDROID_PACKAGE,
++        sha256_cert_fingerprints: fingerprints,
++      },
++    },
++  ];
++}
++
++export function getAppleAppSiteAssociation(env: Env) {
++  return { webcredentials: { apps: list(env.PASSKEY_IOS_APP_IDS) } };
++}
+diff --git a/src/libs/passkey/envelope.ts b/src/libs/passkey/envelope.ts
+new file mode 100644
+index 00000000..a089778b
+--- /dev/null
++++ b/src/libs/passkey/envelope.ts
+@@ -0,0 +1,53 @@
++/**
++ * Pubky WebAuthn envelope ("E"), carried in the WebAuthn challenge (Android) or the iOS PRF
++ * mailbox. Byte layout, all integers big-endian, shared with Pubky Ring
++ * (src/passkey/envelope.ts and ios/PubkyPasskeyExtension):
++ *
++ *   "PKYWA1" (6) | version u8 | flags u8 | exp u32 (unix s) | nonce (16) | urlLen u16 | URL (UTF-8)
++ */
++
++const MAGIC = new TextEncoder().encode('PKYWA1');
++export const ENVELOPE_VERSION = 1;
++export const ENVELOPE_NONCE_LENGTH = 16;
++const HEADER_LENGTH = MAGIC.length + 1 + 1 + 4 + ENVELOPE_NONCE_LENGTH + 2;
++const MAX_URL_LENGTH = 4096;
++
++export interface PubkyEnvelopeInput {
++  exp: number;
++  nonce: Uint8Array;
++  url: string;
++  version?: number;
++  flags?: number;
++}
++
++export function encodeEnvelope({ exp, nonce, url, version = ENVELOPE_VERSION, flags = 0 }: PubkyEnvelopeInput) {
++  if (nonce.length !== ENVELOPE_NONCE_LENGTH) throw new Error('Envelope nonce must be 16 bytes');
++  const urlBytes = new TextEncoder().encode(url);
++  if (urlBytes.length > MAX_URL_LENGTH) throw new Error('Envelope URL is too long');
++  const out = new Uint8Array(HEADER_LENGTH + urlBytes.length);
++  const view = new DataView(out.buffer);
++  out.set(MAGIC, 0);
++  out[6] = version;
++  out[7] = flags;
++  view.setUint32(8, exp);
++  out.set(nonce, 12);
++  view.setUint16(12 + ENVELOPE_NONCE_LENGTH, urlBytes.length);
++  out.set(urlBytes, HEADER_LENGTH);
++  return out;
++}
++
++export function base64UrlEncode(bytes: Uint8Array): string {
++  let binary = '';
++  for (const byte of bytes) binary += String.fromCharCode(byte);
++  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
++}
++
++export function base64UrlDecode(value: string): Uint8Array {
++  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
++  const binary = atob(base64 + '='.repeat((4 - (base64.length % 4)) % 4));
++  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
++}
++
++export function randomBytes(length: number): Uint8Array<ArrayBuffer> {
++  return crypto.getRandomValues(new Uint8Array(length));
++}
+diff --git a/src/libs/passkey/mailbox.ts b/src/libs/passkey/mailbox.ts
+new file mode 100644
+index 00000000..184f847f
+--- /dev/null
++++ b/src/libs/passkey/mailbox.ts
+@@ -0,0 +1,81 @@
++import { base64UrlEncode, randomBytes } from './envelope';
++
++/**
++ * iOS request mailbox. iOS gives a passkey provider the rpId and the PRF input, but not the
++ * challenge, so the page leaves the envelope on the HTTP relay under a channel and key that only
++ * someone holding the PRF input can derive. Providers receive the PRF salt
++ * s = SHA-256("WebAuthn PRF" || 0x00 || r), so everything is derived from s.
++ */
++const DOMAIN = 'pubky-ring-webauthn-mailbox-v1';
++const encoder = new TextEncoder();
++
++const concat = (...parts: Uint8Array[]): Uint8Array<ArrayBuffer> => {
++  const out = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
++  let offset = 0;
++  for (const part of parts) {
++    out.set(part, offset);
++    offset += part.length;
++  }
++  return out;
++};
++
++const sha256 = async (...parts: Uint8Array[]): Promise<Uint8Array<ArrayBuffer>> =>
++  new Uint8Array(await crypto.subtle.digest('SHA-256', concat(...parts)));
++
++export const prfSalt = (prfInput: Uint8Array) => sha256(encoder.encode('WebAuthn PRF'), new Uint8Array([0]), prfInput);
++
++export async function mailboxKeyBytes(salt: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
++  const ikm = await crypto.subtle.importKey('raw', concat(salt), 'HKDF', false, ['deriveBits']);
++  const bits = await crypto.subtle.deriveBits(
++    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: encoder.encode(`${DOMAIN}/key`) },
++    ikm,
++    256,
++  );
++  return new Uint8Array(bits);
++}
++
++export const mailboxChannel = async (salt: Uint8Array): Promise<string> =>
++  base64UrlEncode(await sha256(encoder.encode(`${DOMAIN}/channel`), salt));
++
++/** body = gcmNonce (12) || AES-256-GCM(key, gcmNonce, envelope, aad = rpId) */
++export async function sealMailbox({
++  prfInput,
++  envelope,
++  rpId,
++  gcmNonce = randomBytes(12),
++}: {
++  prfInput: Uint8Array;
++  envelope: Uint8Array;
++  rpId: string;
++  gcmNonce?: Uint8Array;
++}): Promise<{ channel: string; body: Uint8Array<ArrayBuffer> }> {
++  const salt = await prfSalt(prfInput);
++  const key = await crypto.subtle.importKey('raw', await mailboxKeyBytes(salt), 'AES-GCM', false, ['encrypt']);
++  const ciphertext = await crypto.subtle.encrypt(
++    { name: 'AES-GCM', iv: concat(gcmNonce), additionalData: encoder.encode(rpId) },
++    key,
++    concat(envelope),
++  );
++  return { channel: await mailboxChannel(salt), body: concat(gcmNonce, new Uint8Array(ciphertext)) };
++}
++
++/** Leaves the sealed envelope on the relay inbox, where Ring's extension fetches it. */
++export async function postMailbox({
++  relay,
++  channel,
++  body,
++  signal,
++}: {
++  relay: string;
++  channel: string;
++  body: Uint8Array<ArrayBuffer>;
++  signal?: AbortSignal;
++}): Promise<void> {
++  const response = await fetch(`${relay.replace(/\/+$/, '')}/${channel}`, {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/octet-stream' },
++    body,
++    signal,
++  });
++  if (!response.ok) throw new Error(`Mailbox relay responded ${response.status}`);
++}
+diff --git a/src/libs/passkey/passkey.test.ts b/src/libs/passkey/passkey.test.ts
+new file mode 100644
+index 00000000..5b4d0a63
+--- /dev/null
++++ b/src/libs/passkey/passkey.test.ts
+@@ -0,0 +1,174 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import vectors from './__fixtures__/vectors.json';
++import { getAppleAppSiteAssociation, getPasskeyAssetLinks } from './association';
++import { base64UrlDecode, base64UrlEncode, encodeEnvelope } from './envelope';
++import { mailboxChannel, mailboxKeyBytes, prfSalt, sealMailbox } from './mailbox';
++import { buildPasskeyRequest, getPasskeyAssertion, isPasskeySignInSupported, PasskeyCeremonyError } from './passkey';
++
++vi.mock('@/libs/pwa/platform', () => ({
++  isIosDevice: vi.fn(() => false),
++  isAndroidIntentDevice: vi.fn(() => true),
++}));
++
++const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex');
++const fromHex = (value: string) => new Uint8Array(Buffer.from(value, 'hex'));
++const RP_ID = vectors.mailbox.rpId;
++
++describe('passkey envelope', () => {
++  it('matches the vector shared with Pubky Ring', () => {
++    const { input } = vectors.envelope;
++    const encoded = encodeEnvelope({ ...input, nonce: fromHex(input.nonce) });
++    expect(hex(encoded)).toBe(vectors.envelope.hex);
++    expect(base64UrlEncode(encoded)).toBe(vectors.envelope.base64url);
++    expect(hex(base64UrlDecode(vectors.envelope.base64url))).toBe(vectors.envelope.hex);
++  });
++
++  it('rejects a nonce of the wrong length', () => {
++    expect(() => encodeEnvelope({ exp: 1, nonce: new Uint8Array(8), url: 'pubkyauth://x' })).toThrow();
++  });
++});
++
++describe('passkey mailbox', () => {
++  it('derives the salt, key and channel shared with Pubky Ring', async () => {
++    const salt = await prfSalt(fromHex(vectors.mailbox.prfInputHex));
++    expect(hex(salt)).toBe(vectors.mailbox.prfSaltHex);
++    expect(hex(await mailboxKeyBytes(salt))).toBe(vectors.mailbox.keyHex);
++    expect(await mailboxChannel(salt)).toBe(vectors.mailbox.channel);
++  });
++
++  it('seals the envelope exactly as Pubky Ring expects', async () => {
++    const sealed = await sealMailbox({
++      prfInput: fromHex(vectors.mailbox.prfInputHex),
++      envelope: fromHex(vectors.envelope.hex),
++      rpId: RP_ID,
++      gcmNonce: fromHex(vectors.mailbox.gcmNonceHex),
++    });
++    expect(sealed.channel).toBe(vectors.mailbox.channel);
++    expect(hex(sealed.body)).toBe(vectors.mailbox.bodyHex);
++  });
++});
++
++describe('buildPasskeyRequest', () => {
++  const authorizationUrl = vectors.envelope.input.url;
++
++  it('puts the envelope in the challenge with an empty allow list (Android)', async () => {
++    const { options, envelope, mailbox } = await buildPasskeyRequest({
++      authorizationUrl,
++      rpId: RP_ID,
++      route: 'challenge',
++      nowSeconds: 1000,
++    });
++    const publicKey = options.publicKey!;
++    expect(publicKey.rpId).toBe(RP_ID);
++    expect(publicKey.challenge).toBe(envelope);
++    expect(publicKey.allowCredentials).toEqual([]);
++    expect(new TextDecoder().decode(envelope.subarray(0, 6))).toBe('PKYWA1');
++    expect(new DataView(envelope.buffer).getUint32(8)).toBe(1120);
++    expect(mailbox).toBeUndefined();
++  });
++
++  it('adds a mailbox on the iOS route', async () => {
++    const { mailbox, options } = await buildPasskeyRequest({ authorizationUrl, rpId: RP_ID, route: 'mailbox' });
++    expect(mailbox?.channel).toMatch(/^[A-Za-z0-9_-]{43}$/);
++    const prf = (options.publicKey!.extensions as { prf: { eval: { first: Uint8Array } } }).prf;
++    expect(prf.eval.first).toHaveLength(32);
++  });
++
++  it('sends the envelope as a credential ID on the allowCredentials route', async () => {
++    const { options, envelope } = await buildPasskeyRequest({
++      authorizationUrl,
++      rpId: RP_ID,
++      route: 'allowCredentials',
++    });
++    expect(options.publicKey!.allowCredentials).toEqual([{ type: 'public-key', id: envelope }]);
++  });
++});
++
++describe('getPasskeyAssertion', () => {
++  const originalCredentials = navigator.credentials;
++
++  afterEach(() => {
++    Object.defineProperty(navigator, 'credentials', { value: originalCredentials, configurable: true });
++  });
++
++  const mockGet = (impl: () => Promise<unknown>) => {
++    Object.defineProperty(navigator, 'credentials', { value: { get: vi.fn(impl) }, configurable: true });
++  };
++
++  it('returns the pubky from the userHandle', async () => {
++    mockGet(async () => ({
++      rawId: new Uint8Array([1, 2, 3]).buffer,
++      response: { userHandle: new TextEncoder().encode(vectors.credentialId.pubky).buffer },
++    }));
++    const request = await buildPasskeyRequest({ authorizationUrl: 'pubkyauth://x', rpId: RP_ID, route: 'challenge' });
++    await expect(getPasskeyAssertion(request)).resolves.toEqual({
++      pubky: vectors.credentialId.pubky,
++      credentialId: 'AQID',
++    });
++  });
++
++  it('reports a cancelled sheet', async () => {
++    mockGet(async () => {
++      throw new DOMException('cancelled', 'NotAllowedError');
++    });
++    const request = await buildPasskeyRequest({ authorizationUrl: 'pubkyauth://x', rpId: RP_ID, route: 'challenge' });
++    await expect(getPasskeyAssertion(request)).rejects.toMatchObject({ reason: 'cancelled' });
++  });
++
++  it('refuses an assertion without a userHandle', async () => {
++    mockGet(async () => ({ rawId: new ArrayBuffer(1), response: { userHandle: null } }));
++    const request = await buildPasskeyRequest({ authorizationUrl: 'pubkyauth://x', rpId: RP_ID, route: 'challenge' });
++    await expect(getPasskeyAssertion(request)).rejects.toBeInstanceOf(PasskeyCeremonyError);
++  });
++});
++
++describe('isPasskeySignInSupported', () => {
++  beforeEach(() => {
++    Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
++    Object.defineProperty(window, 'PublicKeyCredential', {
++      value: function PublicKeyCredential() {},
++      configurable: true,
++    });
++    Object.defineProperty(navigator, 'credentials', { value: { get: vi.fn() }, configurable: true });
++  });
++
++  afterEach(() => {
++    window.localStorage.clear();
++    window.history.replaceState(null, '', '/');
++  });
++
++  it('is on for mobile browsers with WebAuthn', () => {
++    expect(isPasskeySignInSupported()).toBe(true);
++  });
++
++  it('can be turned off with a query parameter or localStorage', () => {
++    window.history.replaceState(null, '', '/?ringPasskey=0');
++    expect(isPasskeySignInSupported()).toBe(false);
++    window.history.replaceState(null, '', '/');
++    window.localStorage.setItem('pubky-ring-passkey-disabled', 'true');
++    expect(isPasskeySignInSupported()).toBe(false);
++  });
++});
++
++describe('association files', () => {
++  it('serve nothing until configured', () => {
++    expect(getPasskeyAssetLinks({})).toEqual([]);
++    expect(getAppleAppSiteAssociation({})).toEqual({ webcredentials: { apps: [] } });
++  });
++
++  it('list the configured apps', () => {
++    expect(getPasskeyAssetLinks({ PASSKEY_ANDROID_CERT_SHA256: 'aa:bb, cc:dd' })).toEqual([
++      {
++        relation: ['delegate_permission/common.get_login_creds'],
++        target: {
++          namespace: 'android_app',
++          package_name: 'to.pubky.ring',
++          sha256_cert_fingerprints: ['AA:BB', 'CC:DD'],
++        },
++      },
++    ]);
++    expect(getAppleAppSiteAssociation({ PASSKEY_IOS_APP_IDS: 'TEAMID.app.example.ring' })).toEqual({
++      webcredentials: { apps: ['TEAMID.app.example.ring'] },
++    });
++  });
++});
+diff --git a/src/libs/passkey/passkey.ts b/src/libs/passkey/passkey.ts
+new file mode 100644
+index 00000000..4a5cd871
+--- /dev/null
++++ b/src/libs/passkey/passkey.ts
+@@ -0,0 +1,158 @@
++import {
++  getPasskeyRpId,
++  PASSKEY_CEREMONY_TIMEOUT_MS,
++  PASSKEY_DISABLE_QUERY,
++  PASSKEY_DISABLE_STORAGE_KEY,
++  PASSKEY_ENVELOPE_LIFETIME_S,
++  PASSKEY_ROUTE_QUERY,
++} from '@/config/passkey';
++import { isAndroidIntentDevice, isIosDevice } from '@/libs/pwa/platform';
++import { base64UrlEncode, encodeEnvelope, ENVELOPE_NONCE_LENGTH, randomBytes } from './envelope';
++import { postMailbox, sealMailbox } from './mailbox';
++
++/**
++ * How the envelope reaches Ring:
++ * - `challenge`: Android. Credential Manager passes the full request JSON, including the challenge.
++ * - `mailbox`: iOS 18+. The envelope waits on the relay under a key derived from the PRF input.
++ * - `allowCredentials`: iOS 17 experiment. The envelope is sent as a credential ID. Undocumented.
++ */
++export type PasskeyRoute = 'challenge' | 'mailbox' | 'allowCredentials';
++
++export interface PasskeyAssertion {
++  /** z-base-32 pubky Ring returned as the WebAuthn userHandle. */
++  pubky: string;
++  credentialId: string;
++}
++
++export class PasskeyCeremonyError extends Error {
++  constructor(
++    readonly reason: 'unsupported' | 'cancelled' | 'mailbox' | 'no-user-handle' | 'failed',
++    message: string,
++    readonly cause?: unknown,
++  ) {
++    super(message);
++    this.name = 'PasskeyCeremonyError';
++  }
++}
++
++const readFlag = (name: string): string | null => {
++  try {
++    return new URLSearchParams(window.location.search).get(name);
++  } catch {
++    return null;
++  }
++};
++
++/** Mobile browsers with WebAuthn, unless turned off with `?ringPasskey=0` or the localStorage switch. */
++export function isPasskeySignInSupported(): boolean {
++  if (typeof window === 'undefined' || !window.isSecureContext) return false;
++  if (typeof window.PublicKeyCredential === 'undefined' || !navigator.credentials?.get) return false;
++  const queryFlag = readFlag(PASSKEY_DISABLE_QUERY);
++  if (queryFlag === '0' || queryFlag === 'false') return false;
++  try {
++    if (window.localStorage.getItem(PASSKEY_DISABLE_STORAGE_KEY) === 'true') return false;
++  } catch {
++    // Storage can be unavailable in private modes; the passkey path stays on.
++  }
++  return isIosDevice() || isAndroidIntentDevice();
++}
++
++export function defaultPasskeyRoute(): PasskeyRoute {
++  if (!isIosDevice()) return 'challenge';
++  return readFlag(PASSKEY_ROUTE_QUERY) === 'allowCredentials' ? 'allowCredentials' : 'mailbox';
++}
++
++export interface PasskeyRequest {
++  options: CredentialRequestOptions;
++  envelope: Uint8Array<ArrayBuffer>;
++  mailbox?: { channel: string; body: Uint8Array<ArrayBuffer> };
++}
++
++export async function buildPasskeyRequest({
++  authorizationUrl,
++  rpId = getPasskeyRpId(),
++  route = defaultPasskeyRoute(),
++  nowSeconds = Math.floor(Date.now() / 1000),
++  signal,
++}: {
++  authorizationUrl: string;
++  rpId?: string;
++  route?: PasskeyRoute;
++  nowSeconds?: number;
++  signal?: AbortSignal;
++}): Promise<PasskeyRequest> {
++  const envelope = encodeEnvelope({
++    exp: nowSeconds + PASSKEY_ENVELOPE_LIFETIME_S,
++    nonce: randomBytes(ENVELOPE_NONCE_LENGTH),
++    url: authorizationUrl,
++  }) as Uint8Array<ArrayBuffer>;
++  const prfInput = randomBytes(32);
++  const mailbox = route === 'mailbox' ? await sealMailbox({ prfInput, envelope, rpId }) : undefined;
++  const publicKey: PublicKeyCredentialRequestOptions & { hints?: string[] } = {
++    challenge: envelope,
++    rpId,
++    allowCredentials: route === 'allowCredentials' ? [{ type: 'public-key', id: envelope }] : [],
++    userVerification: 'preferred',
++    timeout: PASSKEY_CEREMONY_TIMEOUT_MS,
++    // Keep the request on this phone: a cross-device (hybrid QR) passkey cannot be Ring here.
++    hints: ['client-device'],
++    extensions: { prf: { eval: { first: prfInput } } } as AuthenticationExtensionsClientInputs,
++  };
++  return { options: { publicKey, ...(signal ? { signal } : {}) }, envelope, mailbox };
++}
++
++/** Builds the request and, on the mailbox route, leaves the sealed envelope on the relay. */
++export async function preparePasskeyRequest({
++  authorizationUrl,
++  relay,
++  route,
++  signal,
++}: {
++  authorizationUrl: string;
++  relay: string;
++  route?: PasskeyRoute;
++  signal?: AbortSignal;
++}): Promise<PasskeyRequest> {
++  if (!isPasskeySignInSupported()) throw new PasskeyCeremonyError('unsupported', 'Passkey sign-in is not supported');
++  const request = await buildPasskeyRequest({ authorizationUrl, route, signal });
++  if (request.mailbox) {
++    try {
++      await postMailbox({ relay, ...request.mailbox, signal });
++    } catch (error) {
++      throw new PasskeyCeremonyError('mailbox', 'Could not reach the relay', error);
++    }
++  }
++  return request;
++}
++
++/**
++ * Runs the WebAuthn ceremony that hands the Pubky grant request to Ring. Ring posts the signed
++ * approval to the relay before it returns, so the caller's `awaitApproval` delivers the session.
++ * The assertion itself is not a credential: callers only use its userHandle to check that the
++ * approving pubky is the one the user picked in the OS sheet.
++ *
++ * `navigator.credentials.get` is called synchronously, so a click handler keeps its user activation.
++ */
++export async function getPasskeyAssertion(request: PasskeyRequest): Promise<PasskeyAssertion> {
++  let credential: Credential | null;
++  try {
++    credential = await navigator.credentials.get(request.options);
++  } catch (error) {
++    const name = error instanceof DOMException ? error.name : '';
++    throw new PasskeyCeremonyError(
++      name === 'NotAllowedError' || name === 'AbortError' ? 'cancelled' : 'failed',
++      error instanceof Error ? error.message : 'Passkey request failed',
++      error,
++    );
++  }
++  const assertion = credential as PublicKeyCredential | null;
++  const response = assertion?.response as AuthenticatorAssertionResponse | undefined;
++  const userHandle = response?.userHandle;
++  if (!assertion || !userHandle || userHandle.byteLength === 0) {
++    throw new PasskeyCeremonyError('no-user-handle', 'The passkey did not identify a pubky');
++  }
++  return {
++    pubky: new TextDecoder().decode(userHandle),
++    credentialId: base64UrlEncode(new Uint8Array(assertion.rawId)),
++  };
++}
+--
+2.43.0
+

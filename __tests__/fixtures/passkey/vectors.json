@@ -1,0 +1,36 @@
+{
+	"description": "Pubky WebAuthn envelope, iOS PRF mailbox and refusal report vectors. Regenerate with node scripts/passkey/generate-vectors.js.",
+	"envelope": {
+		"input": {
+			"version": 1,
+			"flags": 0,
+			"exp": 1893456000,
+			"nonce": "101112131415161718191a1b1c1d1e1f",
+			"url": "pubkyauth://signin_grant?caps=%2Fpub%2Fpubky.app%2F%3Arw&relay=https%3A%2F%2Fhttprelay.staging.pubky.app%2Finbox&cid=pubky-ring-demo.vercel.app&cpk=qdw49yskax4cd33s85ojn45qom1hb7unn77d1eou3shnnjd95phy&af=v1&epk=kN-sSW2BOQClhwV8qF4DVOq9xrQHJvhvF-zU_W-KbTQ"
+		},
+		"hex": "504b59574131010070dbd880101112131415161718191a1b1c1d1e1f00fe7075626b79617574683a2f2f7369676e696e5f6772616e743f636170733d2532467075622532467075626b792e61707025324625334172772672656c61793d68747470732533412532462532466874747072656c61792e73746167696e672e7075626b792e617070253246696e626f78266369643d7075626b792d72696e672d64656d6f2e76657263656c2e6170702663706b3d716477343979736b617834636433337338356f6a6e3435716f6d31686237756e6e37376431656f753373686e6e6a6439357068792661663d76312665706b3d6b4e2d73535732424f51436c6877563871463444564f7139787251484a766876462d7a555f572d4b625451",
+		"base64url": "UEtZV0ExAQBw29iAEBESExQVFhcYGRobHB0eHwD-cHVia3lhdXRoOi8vc2lnbmluX2dyYW50P2NhcHM9JTJGcHViJTJGcHVia3kuYXBwJTJGJTNBcncmcmVsYXk9aHR0cHMlM0ElMkYlMkZodHRwcmVsYXkuc3RhZ2luZy5wdWJreS5hcHAlMkZpbmJveCZjaWQ9cHVia3ktcmluZy1kZW1vLnZlcmNlbC5hcHAmY3BrPXFkdzQ5eXNrYXg0Y2QzM3M4NW9qbjQ1cW9tMWhiN3Vubjc3ZDFlb3Uzc2hubmpkOTVwaHkmYWY9djEmZXBrPWtOLXNTVzJCT1FDbGh3VjhxRjREVk9xOXhyUUhKdmh2Ri16VV9XLUtiVFE"
+	},
+	"mailbox": {
+		"rpId": "pubky-ring-demo.vercel.app",
+		"prfInputHex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+		"prfSaltHex": "4b59077d71337950ef366a420b3342a5ac28e7812b179299bcd2fb2c55699ed8",
+		"keyHex": "16d13018b07017ee532b0f10ba0a9dce756071181f21d7477fcc4a795a3e52f5",
+		"channel": "O5XHN2uPgBQsCFHuip1-hJZBSObw4il6oF-oIQ1sMFI",
+		"gcmNonceHex": "404142434445464748494a4b",
+		"bodyHex": "404142434445464748494a4b5abf0533686d6fa1f1f8d0e2614e13e43c51db4e36e3fe16a98b48cbb567ae51056f79f6e792b670ff1c988aa54f9f2c47cac018739b31a5fcd11f7b05ef227c3aa761374aafc2ce1c6f599c23674c962faf2a4bde3df30f94a95df0c85d84f242bc8c69be518c78b60ebf8f74b6198b853c5d0c567452e3dfa6a650d99c0586c9ebf328e4c6bc7e2d1f2c63b8aeebcef9503e73080aeabcd94e8485a37303b4797970327237519c2463a5813f2ab8703378f2e41a532ba6596605bd5e0ed54e1317b072d724decb74e775eb908e8c1966e8e64293639cf59f20e1b49e7c2315194e978636851b9f48bcda1339cba91fbe61135880603821028e9198620211326b34cd846e26c03ab1b6de76ec8ead120a7a8a5c1743229f64827c74e1e158c2eb65615770ce1c9d89cd40cf"
+	},
+	"report": {
+		"nonceHex": "101112131415161718191a1b1c1d1e1f",
+		"relay": "https://httprelay.staging.pubky.app/inbox/",
+		"channel": "8kMrGDYMkV1h8W9dNXGWnIVCBLwySVFXqbhKp7WEzXo",
+		"url": "https://httprelay.staging.pubky.app/inbox/8kMrGDYMkV1h8W9dNXGWnIVCBLwySVFXqbhKp7WEzXo",
+		"reason": "client_id_mismatch",
+		"body": "{\"v\":1,\"reason\":\"client_id_mismatch\"}"
+	},
+	"credentialId": {
+		"rpId": "pubky-ring-demo.vercel.app",
+		"pubky": "o1gg96ewuojmopcjbz8895478wdtxtzzuxnfjjz8o8e77csa1ngo",
+		"hex": "5d5fba5f8ad0329fdda63a943418742a"
+	}
+}

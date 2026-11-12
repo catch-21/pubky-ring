@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ring passkey emulator check</title>
+<style>
+body { font-family: sans-serif; padding: 16px; }
+button { font-size: 20px; padding: 14px; margin: 8px 0; width: 100%; }
+pre { white-space: pre-wrap; word-break: break-all; font-size: 15px; background: #eee; padding: 8px; }
+</style>
+</head>
+<body>
+<h2>Ring passkey emulator check</h2>
+<button id="ok">Sign in (cid = this host)</button>
+<button id="bad">Sign in (cid = evil.example)</button>
+<pre id="out">ready</pre>
+<script>
+const out = document.getElementById('out');
+const log = (t) => { out.textContent += '\n' + t; };
+const b64u = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function envelope(url, exp) {
+  const urlBytes = new TextEncoder().encode(url);
+  const buf = new Uint8Array(6 + 1 + 1 + 4 + 16 + 2 + urlBytes.length);
+  buf.set(new TextEncoder().encode('PKYWA1'), 0);
+  buf[6] = 1; buf[7] = 0;
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(8, exp);
+  buf.set(crypto.getRandomValues(new Uint8Array(16)), 12);
+  dv.setUint16(28, urlBytes.length);
+  buf.set(urlBytes, 30);
+  return buf;
+}
+async function run(cid) {
+  out.textContent = 'cid=' + cid + ' rpId=' + location.hostname;
+  const channel = b64u(crypto.getRandomValues(new Uint8Array(16)));
+  const url = 'pubkyauth://signin_grant?caps=%2Fpub%2Fpubky.app%2F%3Arw'
+    + '&relay=' + encodeURIComponent('https://httprelay.staging.pubky.app/inbox/' + channel)
+    + '&cid=' + encodeURIComponent(cid)
+    + '&cpk=qdw49yskax4cd33s85ojn45qom1hb7unn77d1eou3shnnjd95phy&af=v1&epk=kN-sSW2BOQClhwV8qF4DVOq9xrQHJvhvF-zU_W-KbTQ';
+  const challenge = envelope(url, Math.floor(Date.now() / 1000) + 120);
+  try {
+    const cred = await navigator.credentials.get({
+      publicKey: { challenge, rpId: location.hostname, allowCredentials: [], userVerification: 'preferred', timeout: 120000 },
+    });
+    const r = cred.response;
+    log('RESULT: assertion');
+    log('credentialId=' + b64u(new Uint8Array(cred.rawId)));
+    log('userHandle=' + (r.userHandle ? new TextDecoder().decode(r.userHandle) : 'null'));
+    log('clientDataJSON=' + new TextDecoder().decode(r.clientDataJSON));
+    log('authenticatorData bytes=' + r.authenticatorData.byteLength + ' sig bytes=' + r.signature.byteLength);
+  } catch (e) {
+    log('RESULT: ' + e.name + ': ' + e.message);
+  }
+}
+document.getElementById('ok').onclick = () => run(location.hostname);
+document.getElementById('bad').onclick = () => run('evil.example');
+</script>
+</body>
+</html>

@@ -8,6 +8,15 @@ jest.mock('@react-navigation/native', () => ({
 	useNavigationState: (selector: (state: unknown) => unknown) =>
 		selector({ routeNames: ['ConfirmAuth'], index: 0 }),
 }));
+jest.mock('react-native-reanimated', () => ({
+	__esModule: true,
+	default: { View: require('react-native').View },
+	useSharedValue: (initialValue: unknown) => ({ get: () => initialValue, set: jest.fn() }),
+	useAnimatedStyle: () => ({}),
+	withSpring: (value: number) => value,
+	withTiming: (value: number) => value,
+}));
+jest.mock('react-native-worklets', () => ({ scheduleOnRN: (callback: () => void) => callback() }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }));
 jest.mock('../src/sheets/sheetNavigation.tsx', () => ({ hideActiveSheet: jest.fn() }));
 jest.mock('../src/components/AppHeader.tsx', () => ({ HEADER_HEIGHT: 56 }));

@@ -2,7 +2,7 @@
 #import <Security/Security.h>
 
 static NSString *const kSharedService = @"pubky.shared.v1";
-static NSString *const kSharedAccessGroup = @"KYH47R284B.pubky.shared";
+static NSString *const kSharedAccessGroupSuffix = @"pubky.shared";
 static NSString *const kOwnSourceApp = @"app.pubkyring";
 static NSString *const kErrorDomain = @"shared_pubky";
 
@@ -11,12 +11,25 @@ static NSArray<NSString *> *ExternalSourceApps(void)
   return @[@"to.bitkit", @"to.bitkit.tnet", @"to.bitkit.dev"];
 }
 
+// "<team prefix>pubky.shared". The prefix comes from Info.plist (AppIdentifierPrefix = $(AppIdentifierPrefix))
+// so the group follows whichever team signs the build (ios/Config/Signing.xcconfig).
+static NSString *SharedAccessGroup(void)
+{
+  static NSString *group;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    NSString *prefix = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"AppIdentifierPrefix"] ?: @"";
+    group = [prefix stringByAppendingString:kSharedAccessGroupSuffix];
+  });
+  return group;
+}
+
 static NSMutableDictionary *SharedQuery(NSString *account)
 {
   NSMutableDictionary *query = [@{
     (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
     (__bridge id)kSecAttrService: kSharedService,
-    (__bridge id)kSecAttrAccessGroup: kSharedAccessGroup,
+    (__bridge id)kSecAttrAccessGroup: SharedAccessGroup(),
     (__bridge id)kSecAttrSynchronizable: @NO,
   } mutableCopy];
   if (account) {

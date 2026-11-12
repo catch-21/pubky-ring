@@ -62,6 +62,11 @@ jest.mock('../src/utils/inputParser.ts', () => ({
 	parseInput: jest.fn(async input => ({ rawInput: input })),
 }));
 
+jest.mock('../src/passkey/usePasskeySnapshotSync.ts', () => ({
+	__esModule: true,
+	usePasskeySnapshotSync: jest.fn(),
+}));
+
 jest.mock('@react-native-community/netinfo', () => ({
 	__esModule: true,
 	default: {

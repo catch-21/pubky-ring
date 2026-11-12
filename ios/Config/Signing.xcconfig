@@ -1,0 +1,20 @@
+// Signing and identifiers for Pubky Ring and its passkey extension.
+//
+// Replace the placeholders with values from your own Apple Developer account, or keep them out of git
+// by putting the same keys in Signing.local.xcconfig (ignored), which overrides this file.
+// See docs/passkey-provider/MVP.md, "iPhone".
+//
+// RING_DEVELOPMENT_TEAM       Team ID (Membership details in the developer portal), for example ABCDE12345.
+// RING_APP_BUNDLE_ID          App ID for Pubky Ring. Register it with the App Groups and AutoFill Credential Provider capabilities.
+// RING_PASSKEY_EXTENSION_ID   App ID for the extension. Must start with RING_APP_BUNDLE_ID followed by a dot.
+// RING_APP_GROUP              App Group shared by both App IDs, for example group.com.example.pubkyring.
+//
+// The keychain groups are derived from the team: $(AppIdentifierPrefix)app.pubkyring holds Ring's keys and
+// $(AppIdentifierPrefix)pubky.shared is shared with Bitkit, so neither needs configuring here.
+
+RING_DEVELOPMENT_TEAM = YOUR_TEAM_ID
+RING_APP_BUNDLE_ID = com.example.pubkyring
+RING_PASSKEY_EXTENSION_ID = $(RING_APP_BUNDLE_ID).CredentialProvider
+RING_APP_GROUP = group.com.example.pubkyring
+
+#include? "Signing.local.xcconfig"
