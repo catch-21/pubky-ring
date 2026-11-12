@@ -31,6 +31,8 @@ class PasskeyConsentActivity : ReactActivity() {
 
   private var pending: Pending? = null
   private var launchOptions: Bundle? = null
+  /** Set when the caller failed the origin check: the surface only reports the refusal. */
+  private var refusal: String? = null
   private var finished = false
 
   override fun getMainComponentName(): String = COMPONENT_NAME
@@ -66,17 +68,26 @@ class PasskeyConsentActivity : ReactActivity() {
         } catch (e: Exception) {
           Log.w(TAG, "Origin check failed", e)
           null
-        } ?: return "Caller is not an allowlisted browser"
-    val originHost = Uri.parse(origin).host ?: return "Malformed origin"
+        }
+    val originHost = origin?.let { Uri.parse(it).host }
+    // A refused caller still reaches the surface, which tells the page why before ending the request.
+    refusal =
+        when {
+          origin == null -> "browser_not_allowed"
+          originHost == null -> "origin_mismatch"
+          else -> null
+        }
+    refusal?.let { Log.w(TAG, "Refusing passkey request: $it") }
     val requestId = UUID.randomUUID().toString()
     pending = Pending(requestId, parsed.rpId, pubky, clientDataHash)
     launchOptions =
         Bundle().apply {
           putString("requestId", requestId)
           putString("rpId", parsed.rpId)
-          putString("originHost", originHost)
+          originHost?.let { putString("originHost", it) }
           putString("envelope", PubkyWebAuthn.encodeBase64Url(parsed.challenge))
           putString("pubky", pubky)
+          refusal?.let { putString("refusal", it) }
         }
     return null
   }
@@ -86,7 +97,7 @@ class PasskeyConsentActivity : ReactActivity() {
 
   fun complete(requestId: String, pubky: String, userVerified: Boolean): Boolean {
     val request = pending ?: return false
-    if (finished || request.requestId != requestId || request.pubky != pubky) return false
+    if (finished || refusal != null || request.requestId != requestId || request.pubky != pubky) return false
     val credentialId = PubkyWebAuthn.credentialId(request.rpId, pubky)
     val authenticatorData = PubkyWebAuthn.authenticatorData(request.rpId, userVerified)
     val signature = CeremonyKeyStore.sign(credentialId, authenticatorData, request.clientDataHash)
@@ -97,9 +108,10 @@ class PasskeyConsentActivity : ReactActivity() {
     return true
   }
 
-  fun cancel(requestId: String, message: String): Boolean {
+  /** A refusal ends as a failure (NotReadableError in Chrome), anything else as a cancellation (NotAllowedError). */
+  fun cancel(requestId: String, message: String, refused: Boolean): Boolean {
     if (finished || pending?.requestId != requestId) return false
-    finishWithError(message, cancelled = true)
+    finishWithError(message, cancelled = !refused)
     return true
   }
 

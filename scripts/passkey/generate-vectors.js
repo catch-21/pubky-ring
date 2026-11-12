@@ -28,7 +28,7 @@ const body = ref.sealMailbox({ s, gcmNonce, envelope, rpId: RP_ID });
 
 const vectors = {
 	description:
-		'Pubky WebAuthn envelope and iOS PRF mailbox vectors. Regenerate with node scripts/passkey/generate-vectors.js.',
+		'Pubky WebAuthn envelope, iOS PRF mailbox and refusal report vectors. Regenerate with node scripts/passkey/generate-vectors.js.',
 	envelope: {
 		input: { ...envelopeInput, nonce: hex(envelopeInput.nonce) },
 		hex: hex(envelope),
@@ -42,6 +42,14 @@ const vectors = {
 		channel: ref.mailboxChannel(s),
 		gcmNonceHex: hex(gcmNonce),
 		bodyHex: hex(body),
+	},
+	report: {
+		nonceHex: hex(envelopeInput.nonce),
+		relay: 'https://httprelay.staging.pubky.app/inbox/',
+		channel: ref.reportChannel(envelopeInput.nonce),
+		url: ref.reportUrl('https://httprelay.staging.pubky.app/inbox/', envelopeInput.nonce),
+		reason: 'client_id_mismatch',
+		body: ref.reportBody('client_id_mismatch'),
 	},
 	credentialId: {
 		rpId: RP_ID,

@@ -95,9 +95,9 @@ class PubkyPasskeyModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun cancelRequest(requestId: String, message: String, promise: Promise) {
+  fun cancelRequest(requestId: String, message: String, refused: Boolean, promise: Promise) {
     try {
-      promise.resolve(consentActivity(requestId)?.cancel(requestId, message) ?: false)
+      promise.resolve(consentActivity(requestId)?.cancel(requestId, message, refused) ?: false)
     } catch (e: Exception) {
       promise.reject(ERROR_CODE, e)
     }

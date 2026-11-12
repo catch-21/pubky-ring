@@ -1,5 +1,5 @@
 {
-	"description": "Pubky WebAuthn envelope and iOS PRF mailbox vectors. Regenerate with node scripts/passkey/generate-vectors.js.",
+	"description": "Pubky WebAuthn envelope, iOS PRF mailbox and refusal report vectors. Regenerate with node scripts/passkey/generate-vectors.js.",
 	"envelope": {
 		"input": {
 			"version": 1,
@@ -19,6 +19,14 @@
 		"channel": "O5XHN2uPgBQsCFHuip1-hJZBSObw4il6oF-oIQ1sMFI",
 		"gcmNonceHex": "404142434445464748494a4b",
 		"bodyHex": "404142434445464748494a4b5abf0533686d6fa1f1f8d0e2614e13e43c51db4e36e3fe16a98b48cbb567ae51056f79f6e792b670ff1c988aa54f9f2c47cac018739b31a5fcd11f7b05ef227c3aa761374aafc2ce1c6f599c23674c962faf2a4bde3df30f94a95df0c85d84f242bc8c69be518c78b60ebf8f74b6198b853c5d0c567452e3dfa6a650d99c0586c9ebf328e4c6bc7e2d1f2c63b8aeebcef9503e73080aeabcd94e8485a37303b4797970327237519c2463a5813f2ab8703378f2e41a532ba6596605bd5e0ed54e1317b072d724decb74e775eb908e8c1966e8e64293639cf59f20e1b49e7c2315194e978636851b9f48bcda1339cba91fbe61135880603821028e9198620211326b34cd846e26c03ab1b6de76ec8ead120a7a8a5c1743229f64827c74e1e158c2eb65615770ce1c9d89cd40cf"
+	},
+	"report": {
+		"nonceHex": "101112131415161718191a1b1c1d1e1f",
+		"relay": "https://httprelay.staging.pubky.app/inbox/",
+		"channel": "8kMrGDYMkV1h8W9dNXGWnIVCBLwySVFXqbhKp7WEzXo",
+		"url": "https://httprelay.staging.pubky.app/inbox/8kMrGDYMkV1h8W9dNXGWnIVCBLwySVFXqbhKp7WEzXo",
+		"reason": "client_id_mismatch",
+		"body": "{\"v\":1,\"reason\":\"client_id_mismatch\"}"
 	},
 	"credentialId": {
 		"rpId": "pubky-ring-demo.vercel.app",

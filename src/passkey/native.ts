@@ -19,7 +19,7 @@ interface PubkyPasskeyNativeModule {
 	getProviderStatus: () => Promise<PasskeyProviderStatus>;
 	openProviderSettings: () => Promise<boolean>;
 	completeRequest: (requestId: string, pubky: string, userVerified: boolean) => Promise<boolean>;
-	cancelRequest: (requestId: string, message: string) => Promise<boolean>;
+	cancelRequest: (requestId: string, message: string, refused: boolean) => Promise<boolean>;
 }
 
 const nativeModule = NativeModules.PubkyPasskey as PubkyPasskeyNativeModule | undefined;
@@ -80,10 +80,15 @@ export const completePasskeyRequest = async ({
 	userVerified: boolean;
 }): Promise<boolean> => (nativeModule ? nativeModule.completeRequest(requestId, pubky, userVerified) : false);
 
-export const cancelPasskeyRequest = async (requestId: string, message: string): Promise<boolean> => {
+/** A refusal ends the request as a failure (NotReadableError in Chrome), otherwise as a cancellation (NotAllowedError). */
+export const cancelPasskeyRequest = async (
+	requestId: string,
+	message: string,
+	{ refused = false }: { refused?: boolean } = {},
+): Promise<boolean> => {
 	if (!nativeModule) return false;
 	try {
-		return await nativeModule.cancelRequest(requestId, message);
+		return await nativeModule.cancelRequest(requestId, message, refused);
 	} catch {
 		return false;
 	}

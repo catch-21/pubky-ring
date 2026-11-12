@@ -6,6 +6,7 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 import { err, ok } from '@synonymdev/result';
 import PasskeyConsent from '../src/screens/PasskeyConsent';
 import { approvePasskeyRequest, preparePasskeyRequest } from '../src/passkey/request';
+import { refusePasskeyRequest } from '../src/passkey/report';
 import { cancelPasskeyRequest } from '../src/passkey/native';
 import { getAutoAuthFromStore } from '../src/utils/store-helpers';
 import { DeviceAuthError } from '../src/utils/deviceAuth';
@@ -26,6 +27,7 @@ jest.mock('../src/passkey/request', () => ({
 		}
 	},
 }));
+jest.mock('../src/passkey/report', () => ({ refusePasskeyRequest: jest.fn(async () => true) }));
 jest.mock('../src/passkey/native', () => ({ cancelPasskeyRequest: jest.fn(async () => true) }));
 jest.mock('../src/utils/store-helpers.ts', () => ({ getAutoAuthFromStore: jest.fn(() => false) }));
 jest.mock('../src/utils/deviceAuth', () => ({
@@ -365,23 +367,34 @@ describe('PasskeyConsent', () => {
 		expect(cancelPasskeyRequest).not.toHaveBeenCalled();
 	});
 
-	it('shows a refusal with Close for a rejected request', async () => {
-		const { PasskeyRequestRejection } = jest.requireMock('../src/passkey/request');
-		jest
-			.mocked(preparePasskeyRequest)
-			.mockResolvedValue(err(new PasskeyRequestRejection('client_id_mismatch')));
-		render(
-			<GestureHandlerRootView>
-				<PasskeyConsent {...props} />
-			</GestureHandlerRootView>,
-		);
-		await act(async () => {});
-		expect(screen.getByText('passkey.errorTitle')).toBeTruthy();
-		expect(
-			within(screen.getByTestId('PasskeyConsentError')).getByText('passkey.errors.client_id_mismatch'),
-		).toBeTruthy();
-		fireEvent.press(screen.getByTestId('PasskeyConsentClose'));
-		expect(cancelPasskeyRequest).toHaveBeenCalledWith('request-1', 'passkey.errors.client_id_mismatch');
+	it.each(['client_id_mismatch', 'browser_not_allowed'])(
+		'refuses a %s request at once, with no error sheet',
+		async reason => {
+			const { PasskeyRequestRejection } = jest.requireMock('../src/passkey/request');
+			jest.mocked(preparePasskeyRequest).mockResolvedValue(err(new PasskeyRequestRejection(reason)));
+			render(
+				<GestureHandlerRootView>
+					<PasskeyConsent {...props} />
+				</GestureHandlerRootView>,
+			);
+			await act(async () => {});
+			expect(refusePasskeyRequest).toHaveBeenCalledWith({
+				requestId: 'request-1',
+				envelope: props.envelope,
+				reason,
+			});
+			expect(screen.getByTestId('PasskeyConsentLoading')).toBeTruthy();
+			drag(400);
+			expect(cancelPasskeyRequest).not.toHaveBeenCalled();
+		},
+	);
+
+	it('refuses when approval fails after the swipe', async () => {
+		jest.mocked(approvePasskeyRequest).mockResolvedValueOnce(err('relay unreachable'));
+		await renderConsent();
+		await swipe();
+		expect(refusePasskeyRequest).toHaveBeenCalledWith(expect.objectContaining({ reason: 'approval_failed' }));
+		expect(cancelPasskeyRequest).not.toHaveBeenCalled();
 	});
 
 	it('skips consent with Auto Auth, as scanning does', async () => {

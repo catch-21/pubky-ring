@@ -9,6 +9,7 @@ const { Buffer } = require('buffer');
 const crypto = require('crypto');
 
 const MAILBOX_DOMAIN = 'pubky-ring-webauthn-mailbox-v1';
+const REPORT_DOMAIN = 'pubky-ring-webauthn-report-v1';
 
 const encodeEnvelope = ({ version = 1, flags = 0, exp, nonce, url }) => {
 	const urlBytes = Buffer.from(url, 'utf8');
@@ -48,8 +49,16 @@ const openMailbox = ({ s, body, rpId }) => {
 /** Ring credential ID for (rpId, pubky): 16 bytes, stable across reinstalls of the snapshot. */
 const credentialId = (rpId, pubky) => sha256(Buffer.from('pubky-ring-credential-v1', 'utf8'), Buffer.from([0]), Buffer.from(rpId, 'utf8'), Buffer.from([0]), Buffer.from(pubky, 'utf8')).subarray(0, 16);
 
+/** Where Ring tells the page why it refused a request: the request's relay, keyed by the envelope nonce. */
+const reportChannel = nonce => sha256(Buffer.from(`${REPORT_DOMAIN}/channel`, 'utf8'), nonce).toString('base64url');
+
+const reportUrl = (relay, nonce) => `${relay.replace(/\/+$/, '')}/${reportChannel(nonce)}`;
+
+const reportBody = reason => JSON.stringify({ v: 1, reason });
+
 module.exports = {
 	MAILBOX_DOMAIN,
+	REPORT_DOMAIN,
 	encodeEnvelope,
 	prfSalt,
 	mailboxKey,
@@ -57,4 +66,7 @@ module.exports = {
 	sealMailbox,
 	openMailbox,
 	credentialId,
+	reportChannel,
+	reportUrl,
+	reportBody,
 };

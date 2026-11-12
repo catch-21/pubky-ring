@@ -4,13 +4,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import type { RootState } from '../store';
 import { ActivityIndicator } from '../theme/components.ts';
-import { TextBaseM, TextSmM, TextXsM } from '../theme/typography';
+import { TextSmM, TextXsM } from '../theme/typography';
 import { getPubkyName } from '../store/selectors/pubkySelectors.ts';
 import { getAlwaysShowAuthDetails } from '../store/selectors/settingsSelectors.ts';
 import { getAutoAuthFromStore } from '../utils/store-helpers.ts';
 import { DeviceAuthError } from '../utils/deviceAuth';
 import { buildApprovedCapabilities, hasEncryptionCapabilities } from '../utils/authCapabilities.ts';
-import Button from '../components/Button.tsx';
 import PermissionCard from '../components/PermissionCard.tsx';
 import CircularProgressBar from '../components/CircularProgressBar.tsx';
 import SafeAreaInset from '../components/SafeAreaInset.tsx';
@@ -25,19 +24,20 @@ import {
 	PreparedPasskeyRequest,
 	preparePasskeyRequest,
 } from '../passkey/request';
+import { PasskeyRefusalReason, refusePasskeyRequest } from '../passkey/report';
 
 const PASSKEY_CONSENT_TIMEOUT_MS = 60000;
 
 type State =
 	| { status: 'loading' }
-	| { status: 'error'; message: string }
 	| { status: 'consent'; request: PreparedPasskeyRequest }
 	| { status: 'authorizing'; request: PreparedPasskeyRequest };
 
 /**
  * The Authorize sheet (ConfirmAuth) for a passkey request, hosted by the Android
  * PasskeyConsentActivity. Dragging the sheet down, back and a tap outside it all
- * cancel the request, so there is no Deny button.
+ * cancel the request, so there is no Deny button. A request Ring will not sign
+ * ends at once as a failure, after its reason is reported to the relay.
  */
 const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 	const { t } = useTranslation();
@@ -57,6 +57,17 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 			cancelPasskeyRequest(props.requestId, message).then();
 		},
 		[props.requestId],
+	);
+
+	const refuse = useCallback(
+		(reason: PasskeyRefusalReason) => {
+			if (finished.current) return;
+			finished.current = true;
+			activeAuth.current?.abort();
+			setState({ status: 'loading' });
+			refusePasskeyRequest({ requestId: props.requestId, envelope: props.envelope, reason }).then();
+		},
+		[props.envelope, props.requestId],
 	);
 
 	const authorize = useCallback(
@@ -80,9 +91,9 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 				setState({ status: 'consent', request });
 				return;
 			}
-			setState({ status: 'error', message: res.error.message || t('passkey.errors.generic') });
+			refuse(res.error.message === 'replayed' ? 'replayed' : 'approval_failed');
 		},
-		[dispatch, t],
+		[dispatch, refuse],
 	);
 
 	useEffect(() => {
@@ -90,13 +101,7 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 		preparePasskeyRequest(props).then(res => {
 			if (!active) return;
 			if (res.isErr()) {
-				setState({
-					status: 'error',
-					message:
-						res.error instanceof PasskeyRequestRejection
-							? t(`passkey.errors.${res.error.code}`)
-							: res.error.message || t('passkey.errors.generic'),
-				});
+				refuse(res.error instanceof PasskeyRequestRejection ? res.error.code : 'invalid_link');
 				return;
 			}
 			// Auto Auth is a developer option; scanning skips consent when it is on, and so does this path.
@@ -109,7 +114,7 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 		return () => {
 			active = false;
 		};
-	}, [authorize, props, t]);
+	}, [authorize, props, refuse]);
 
 	const dismiss = useCallback(() => cancel('User cancelled'), [cancel]);
 
@@ -150,34 +155,18 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 		await authorize(request, approval);
 	}, [approvedCapabilities, authorize, hasEncryption, request]);
 
-	if (state.status === 'loading' || state.status === 'error') {
-		const failed = state.status === 'error';
+	if (state.status === 'loading') {
 		return (
 			<SheetCard onBackdropPress={dismiss} onDragDismiss={dismiss}>
 				<SheetLayout
 					id="passkey"
-					title={t(failed ? 'passkey.errorTitle' : 'auth.authorize')}
+					title={t('auth.authorize')}
 					titleTestID="PasskeyConsentTitle"
 					showBottomSafeAreaInset={false}
 				>
-					<View style={styles.message} testID={failed ? 'PasskeyConsentError' : 'PasskeyConsentLoading'}>
-						{failed ? (
-							<TextBaseM accessibilityRole="alert">{state.message}</TextBaseM>
-						) : (
-							<ActivityIndicator style={styles.loading} />
-						)}
+					<View style={styles.message} testID="PasskeyConsentLoading">
+						<ActivityIndicator style={styles.loading} />
 					</View>
-					{failed && (
-						<View style={styles.footer}>
-							<Button
-								text={t('common.close')}
-								size="large"
-								style={authRequestStyles.fullWidthButton}
-								testID="PasskeyConsentClose"
-								onPress={() => cancel(state.message)}
-							/>
-						</View>
-					)}
 					<SafeAreaInset edge="bottom" />
 				</SheetLayout>
 			</SheetCard>
@@ -236,7 +225,6 @@ const styles = StyleSheet.create({
 	message: { flex: 1 },
 	loading: { flex: 1 },
 	note: { marginTop: 8 },
-	footer: { paddingBottom: 12 },
 });
 
 export default memo(PasskeyConsent);

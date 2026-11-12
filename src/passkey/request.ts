@@ -26,9 +26,11 @@ export interface PasskeyRequestProps {
 	envelope: string;
 	/** z-base-32 pubky of the entry the user picked in the OS sheet. */
 	pubky: string;
+	/** Set when the activity has already refused the caller; the surface only reports it. */
+	refusal?: 'browser_not_allowed' | 'origin_mismatch';
 }
 
-export type PasskeyRequestError = PasskeyRejectReason | 'unknown_pubky' | 'invalid_link';
+export type PasskeyRequestError = PasskeyRejectReason | 'unknown_pubky' | 'invalid_link' | 'browser_not_allowed';
 
 export class PasskeyRequestRejection extends Error {
 	readonly code: PasskeyRequestError;
@@ -59,6 +61,7 @@ export const preparePasskeyRequest = async (
 	{ nowSeconds = Math.floor(Date.now() / 1000), cache = getNonceCache() }: { nowSeconds?: number; cache?: NonceCache } = {},
 ): Promise<Result<PreparedPasskeyRequest>> => {
 	const fail = (code: PasskeyRequestError): Result<PreparedPasskeyRequest> => err(new PasskeyRequestRejection(code));
+	if (props.refusal) return fail(props.refusal);
 
 	let envelopeBytes: Uint8Array;
 	try {
