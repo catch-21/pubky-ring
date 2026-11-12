@@ -1,7 +1,12 @@
 import React, { memo, ReactElement, ReactNode, useEffect, useMemo } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, {
+	useAnimatedStyle,
+	useSharedValue,
+	withSequence,
+	withTiming,
+} from 'react-native-reanimated';
 import { useTheme } from 'styled-components/native';
 import type { Theme } from '../theme';
 import { TextSmM, TextXsM } from '../theme/typography';
@@ -147,9 +152,7 @@ const AuthRequestContent = ({
 							{detailsHeader}
 							<PermissionCard
 								testID={
-									identityOnly
-										? `${testIDPrefix}IdentityVerification`
-										: `${testIDPrefix}RequestedPermissions`
+									identityOnly ? `${testIDPrefix}IdentityVerification` : `${testIDPrefix}RequestedPermissions`
 								}
 							>
 								{identityOnly ? (

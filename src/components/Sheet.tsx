@@ -80,7 +80,11 @@ export const SheetFrame = ({ children }: SheetFrameProps): ReactElement => {
 	return <View style={styles.frame}>{children}</View>;
 };
 
-export const SheetScreen = ({ showBackButton = true, onBackPress, ...props }: SheetScreenProps): ReactElement => {
+export const SheetScreen = ({
+	showBackButton = true,
+	onBackPress,
+	...props
+}: SheetScreenProps): ReactElement => {
 	const navigation = useNavigation();
 	const isFocused = useIsFocused();
 	const hasStackScreenToGoBackTo = useNavigationState(state => {

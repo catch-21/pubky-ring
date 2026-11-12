@@ -11,4 +11,15 @@
         <item name="android:windowTranslucentStatus">false</item>
     </style>
 
+    <!-- Passkey consent: always dark, and see-through so the sheet sits over the browser. -->
+    <style name="PasskeyConsentTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowTranslucentStatus">false</item>
+    </style>
+
 </resources>

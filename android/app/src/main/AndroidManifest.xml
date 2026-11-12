@@ -60,6 +60,7 @@
         android:exported="false"
         android:screenOrientation="portrait"
         android:taskAffinity=""
+        android:theme="@style/PasskeyConsentTheme"
         android:windowSoftInputMode="adjustPan" />
 
       <service

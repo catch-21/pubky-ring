@@ -100,7 +100,8 @@ export const preparePasskeyRequest = async (
 
 /**
  * Signs the grant, posts it to the relay (performAuth, as for a QR scan) and
- * then hands the WebAuthn assertion back to the OS.
+ * then hands the WebAuthn assertion back to the OS. `onApproved` runs between
+ * the two, so the consent screen can show its success state first.
  */
 export const approvePasskeyRequest = async ({
 	request,
@@ -108,12 +109,14 @@ export const approvePasskeyRequest = async ({
 	approvedCapabilities,
 	signal,
 	cache = getNonceCache(),
+	onApproved,
 }: {
 	request: PreparedPasskeyRequest;
 	dispatch: Dispatch;
 	approvedCapabilities?: string;
 	signal?: AbortSignal;
 	cache?: NonceCache;
+	onApproved?: () => Promise<void>;
 }): Promise<Result<string>> => {
 	if (cache.has(request.envelope.nonce)) return err('replayed');
 	const currentCount = getAuthorizedGrantCountFromStore(request.storeKey);
@@ -132,6 +135,7 @@ export const approvePasskeyRequest = async ({
 		currentCount,
 		isGrantAuth: true,
 	}).then();
+	await onApproved?.();
 	const completed = await completePasskeyRequest({
 		requestId: request.requestId,
 		pubky: request.pubky,

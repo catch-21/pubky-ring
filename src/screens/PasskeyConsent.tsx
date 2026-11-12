@@ -1,23 +1,25 @@
 import React, { memo, ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from 'styled-components/native';
 import type { RootState } from '../store';
-import type { Theme } from '../theme';
-import { ThemedView } from '../theme/components.ts';
-import { TextBaseM, TextSmM, TextXlB, TextXsM } from '../theme/typography';
+import { ActivityIndicator } from '../theme/components.ts';
+import { TextBaseM, TextSmM, TextXsM } from '../theme/typography';
 import { getPubkyName } from '../store/selectors/pubkySelectors.ts';
+import { getAlwaysShowAuthDetails } from '../store/selectors/settingsSelectors.ts';
 import { getAutoAuthFromStore } from '../utils/store-helpers.ts';
 import { DeviceAuthError } from '../utils/deviceAuth';
 import { buildApprovedCapabilities, hasEncryptionCapabilities } from '../utils/authCapabilities.ts';
 import Button from '../components/Button.tsx';
-import SwipeToConfirm from '../components/SwipeToConfirm.tsx';
 import PermissionCard from '../components/PermissionCard.tsx';
-import AuthIdentity from '../components/AuthIdentity.tsx';
-import AuthSummary from '../components/AuthSummary.tsx';
 import CircularProgressBar from '../components/CircularProgressBar.tsx';
-import { Folder, Globe, Lock, Shield } from '../icons/index.ts';
+import SafeAreaInset from '../components/SafeAreaInset.tsx';
+import { SheetCard, SheetLayout } from '../components/Sheet.tsx';
+import AuthRequestContent, {
+	AUTH_SUCCESS_FADE_DURATION,
+	authRequestStyles,
+} from '../components/AuthRequestContent.tsx';
+import { Globe, Shield } from '../icons/index.ts';
 import { cancelPasskeyRequest } from '../passkey/native';
 import {
 	approvePasskeyRequest,
@@ -28,21 +30,30 @@ import {
 } from '../passkey/request';
 
 const PASSKEY_CONSENT_TIMEOUT_MS = 60000;
+// ConfirmAuth shows its success state for this long before returning to the calling app.
+const PASSKEY_SUCCESS_MS = AUTH_SUCCESS_FADE_DURATION + 300;
 
 type State =
 	| { status: 'loading' }
 	| { status: 'error'; message: string }
 	| { status: 'consent'; request: PreparedPasskeyRequest }
-	| { status: 'authorizing'; request: PreparedPasskeyRequest };
+	| { status: 'authorizing'; request: PreparedPasskeyRequest }
+	| { status: 'authorized'; request: PreparedPasskeyRequest };
 
+/**
+ * The Authorize sheet (ConfirmAuth) for a passkey request, hosted by the Android
+ * PasskeyConsentActivity. The activity is not a draggable sheet, so Deny stays.
+ */
 const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 	const { t } = useTranslation();
-	const theme = useTheme() as Theme;
 	const dispatch = useDispatch();
+	const alwaysShowDetails = useSelector(getAlwaysShowAuthDetails);
 	const [state, setState] = useState<State>({ status: 'loading' });
+	const [showDetails, setShowDetails] = useState(alwaysShowDetails);
 	const [encryptionApproved, setEncryptionApproved] = useState(true);
 	const finished = useRef(false);
 	const activeAuth = useRef<AbortController | null>(null);
+	const endSuccess = useRef<(() => void) | null>(null);
 
 	const cancel = useCallback(
 		(message: string) => {
@@ -54,13 +65,33 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 		[props.requestId],
 	);
 
+	const finishSuccess = useCallback(() => endSuccess.current?.(), []);
+
 	const authorize = useCallback(
 		async (request: PreparedPasskeyRequest, approvedCapabilities?: string) => {
 			if (finished.current) return;
 			const controller = new AbortController();
 			activeAuth.current = controller;
 			setState({ status: 'authorizing', request });
-			const res = await approvePasskeyRequest({ request, dispatch, approvedCapabilities, signal: controller.signal });
+			const res = await approvePasskeyRequest({
+				request,
+				dispatch,
+				approvedCapabilities,
+				signal: controller.signal,
+				onApproved: async () => {
+					if (controller.signal.aborted || finished.current) return;
+					setState({ status: 'authorized', request });
+					await new Promise<void>(resolve => {
+						const done = (): void => {
+							clearTimeout(timer);
+							endSuccess.current = null;
+							resolve();
+						};
+						const timer = setTimeout(done, PASSKEY_SUCCESS_MS);
+						endSuccess.current = done;
+					});
+				},
+			});
 			if (controller.signal.aborted || finished.current) return;
 			if (res.isOk()) {
 				finished.current = true;
@@ -101,13 +132,25 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 		};
 	}, [authorize, props, t]);
 
+	const dismiss = useCallback(() => {
+		if (state.status === 'authorized') {
+			finishSuccess();
+			return;
+		}
+		cancel('User cancelled');
+	}, [cancel, finishSuccess, state.status]);
+
 	useEffect(() => {
 		const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-			cancel('User cancelled');
+			if (showDetails && state.status === 'consent') {
+				setShowDetails(false);
+			} else {
+				dismiss();
+			}
 			return true;
 		});
 		return () => subscription.remove();
-	}, [cancel]);
+	}, [dismiss, showDetails, state.status]);
 
 	useEffect(() => {
 		if (state.status !== 'consent') return;
@@ -115,7 +158,7 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 		return () => clearTimeout(timeout);
 	}, [cancel, state.status]);
 
-	const request = state.status === 'consent' || state.status === 'authorizing' ? state.request : undefined;
+	const request = 'request' in state ? state.request : undefined;
 	const capabilities = useMemo(() => request?.payload.authDetails.capabilities ?? [], [request]);
 	const hasEncryption = hasEncryptionCapabilities(capabilities);
 	const approvedCapabilities = useMemo(
@@ -134,131 +177,108 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 		await authorize(request, approval);
 	}, [approvedCapabilities, authorize, hasEncryption, request]);
 
-	if (state.status === 'loading') {
-		return <ThemedView style={styles.container} testID="PasskeyConsentLoading" />;
-	}
+	const deny = useCallback(() => cancel('User denied'), [cancel]);
 
-	if (state.status === 'error') {
+	if (state.status === 'loading' || state.status === 'error') {
+		const failed = state.status === 'error';
 		return (
-			<ThemedView style={styles.container} testID="PasskeyConsentError">
-				<View style={styles.content}>
-					<TextXlB>{t('passkey.errorTitle')}</TextXlB>
-					<TextBaseM accessibilityRole="alert">{state.message}</TextBaseM>
-				</View>
-				<Button
-					text={t('common.close')}
-					size="large"
-					style={styles.fullWidthButton}
-					testID="PasskeyConsentClose"
-					onPress={() => cancel(state.message)}
-				/>
-			</ThemedView>
+			<SheetCard onBackdropPress={dismiss}>
+				<SheetLayout
+					id="passkey"
+					title={t(failed ? 'passkey.errorTitle' : 'auth.authorize')}
+					titleTestID="PasskeyConsentTitle"
+					showBottomSafeAreaInset={false}
+				>
+					<View style={styles.message} testID={failed ? 'PasskeyConsentError' : 'PasskeyConsentLoading'}>
+						{failed ? (
+							<TextBaseM accessibilityRole="alert">{state.message}</TextBaseM>
+						) : (
+							<ActivityIndicator style={styles.loading} />
+						)}
+					</View>
+					{failed && (
+						<View style={styles.footer}>
+							<Button
+								text={t('common.close')}
+								size="large"
+								style={authRequestStyles.fullWidthButton}
+								testID="PasskeyConsentClose"
+								onPress={() => cancel(state.message)}
+							/>
+						</View>
+					)}
+					<SafeAreaInset edge="bottom" />
+				</SheetLayout>
+			</SheetCard>
 		);
 	}
 
 	const authorizing = state.status === 'authorizing';
+	const isAuthorized = state.status === 'authorized';
 	return (
-		<ThemedView style={styles.container} testID="PasskeyConsent">
-			<View style={styles.header}>
-				<TextXlB style={styles.title}>{t('passkey.consentTitle')}</TextXlB>
-				{!authorizing && <CircularProgressBar duration={PASSKEY_CONSENT_TIMEOUT_MS} size={24} drain />}
-			</View>
-			<ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-				<PermissionCard testID="PasskeyConsentVerifiedSite">
-					<TextXsM style={styles.sectionTitle}>{t('passkey.requestingSite')}</TextXsM>
-					<View style={styles.row}>
-						<Globe size={16} />
-						<TextBaseM colorName="foreground" style={styles.flex} selectable>
-							{state.request.rpId}
-						</TextBaseM>
-						<Shield size={16} colorName="pubkyApp" />
-					</View>
-					<TextSmM style={styles.note}>{t('passkey.verifiedByBrowser')}</TextSmM>
-				</PermissionCard>
-				<AuthSummary capabilities={approvedCapabilities} authorized={false} />
-				<PermissionCard>
-					<TextXsM style={styles.sectionTitle}>{t('auth.permissions')}</TextXsM>
-					{capabilities.length === 0 && <TextSmM>{t('auth.provePubkyControl')}</TextSmM>}
-					{capabilities.map((capability, index) => (
-						<View key={`${capability.path}:${index}`} style={styles.row}>
-							<Folder size={16} />
-							<TextSmM colorName="foreground" style={styles.flex}>
-								{capability.path}
-							</TextSmM>
-							<TextSmM>{capability.permission}</TextSmM>
-						</View>
-					))}
-				</PermissionCard>
-				{hasEncryption && (
-					<PermissionCard>
-						<View style={styles.row}>
-							<Lock size={16} />
-							<TextSmM style={styles.flex} colorName="foreground">
-								{t('auth.allowEncryptedData')}
-							</TextSmM>
-							<Pressable
-								testID="PasskeyEncryptionToggle"
-								accessibilityRole="switch"
-								accessibilityLabel={t('auth.allowEncryptedData')}
-								accessibilityState={{ checked: encryptionApproved, disabled: authorizing }}
-								disabled={authorizing}
-								hitSlop={12}
-								style={[
-									styles.switch,
-									{ backgroundColor: encryptionApproved ? theme.colors.blue : theme.colors.input },
-								]}
-								onPress={() => setEncryptionApproved(current => !current)}
-							>
-								<View
-									style={[
-										styles.switchThumb,
-										{
-											backgroundColor: theme.colors.background,
-											transform: [{ translateX: encryptionApproved ? 16 : 0 }],
-										},
-									]}
-								/>
-							</Pressable>
-						</View>
-					</PermissionCard>
-				)}
-				<AuthIdentity name={pubkyName} pubky={state.request.storeKey} fullWidth />
-			</ScrollView>
-			<View style={styles.footer}>
-				<SwipeToConfirm
-					text={t(authorizing ? 'auth.authorizing' : 'auth.swipeToAuthorize')}
-					loading={authorizing}
-					testID="PasskeyConsentApprove"
+		<SheetCard onBackdropPress={dismiss}>
+			<SheetLayout
+				id="passkey"
+				title={t(isAuthorized ? 'auth.authorizedTitle' : 'auth.authorize')}
+				titleTestID="PasskeyConsentTitle"
+				showBottomSafeAreaInset={false}
+				onBackPress={showDetails && state.status === 'consent' ? () => setShowDetails(false) : undefined}
+				headerRight={
+					state.status === 'consent' ? (
+						<CircularProgressBar duration={PASSKEY_CONSENT_TIMEOUT_MS} size={24} drain />
+					) : undefined
+				}
+			>
+				<AuthRequestContent
+					view={isAuthorized ? 'success' : showDetails ? 'details' : 'basic'}
+					pubky={state.request.storeKey}
+					name={pubkyName}
+					capabilities={capabilities}
+					encryptionApproved={encryptionApproved}
+					onEncryptionApprovedChange={setEncryptionApproved}
+					relay={state.request.payload.authDetails.relay}
+					authorizing={authorizing}
+					testIDPrefix="PasskeyConsent"
+					detailsHeader={
+						<PermissionCard testID="PasskeyConsentVerifiedSite">
+							<TextXsM style={authRequestStyles.sectionTitle}>{t('passkey.requestingSite')}</TextXsM>
+							<View style={authRequestStyles.permissionRow}>
+								<Globe size={16} />
+								<TextSmM colorName="foreground" style={authRequestStyles.path} selectable>
+									{state.request.rpId}
+								</TextSmM>
+								<Shield size={16} colorName="pubkyApp" />
+							</View>
+							<TextSmM style={styles.note}>{t('passkey.verifiedByBrowser')}</TextSmM>
+						</PermissionCard>
+					}
+					footerExtra={
+						<Button
+							text={t('auth.deny')}
+							size="large"
+							style={authRequestStyles.fullWidthButton}
+							variant="secondary"
+							disabled={authorizing}
+							testID="PasskeyConsentDeny"
+							onPress={deny}
+						/>
+					}
+					onShowDetails={() => setShowDetails(true)}
 					onConfirm={handleApprove}
+					onDone={finishSuccess}
+					onEscape={deny}
 				/>
-				<Button
-					text={t('auth.deny')}
-					size="large"
-					style={styles.fullWidthButton}
-					variant="secondary"
-					disabled={authorizing}
-					testID="PasskeyConsentDeny"
-					onPress={() => cancel('User denied')}
-				/>
-			</View>
-		</ThemedView>
+				<SafeAreaInset edge="bottom" />
+			</SheetLayout>
+		</SheetCard>
 	);
 };
 
 const styles = StyleSheet.create({
-	container: { flex: 1, padding: 24, gap: 16 },
-	header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-	title: { flex: 1 },
-	scroll: { flex: 1 },
-	content: { flexGrow: 1, gap: 16, paddingBottom: 16 },
-	sectionTitle: { marginBottom: 8 },
-	row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
-	flex: { flex: 1, minWidth: 0 },
+	message: { flex: 1 },
+	loading: { flex: 1 },
 	note: { marginTop: 8 },
-	switch: { width: 36, height: 20, padding: 2, borderRadius: 10 },
-	switchThumb: { width: 16, height: 16, borderRadius: 8 },
-	footer: { gap: 12 },
-	fullWidthButton: { flex: 0, width: '100%' },
+	footer: { paddingBottom: 12 },
 });
 
 export default memo(PasskeyConsent);
