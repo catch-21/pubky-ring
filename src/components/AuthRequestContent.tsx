@@ -1,5 +1,6 @@
-import React, { memo, ReactElement, ReactNode, useEffect, useMemo } from 'react';
+import React, { memo, ReactElement, ReactNode, useContext, useEffect, useMemo } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
 import Animated, {
 	useAnimatedStyle,
@@ -21,6 +22,7 @@ import PermissionCard from './PermissionCard.tsx';
 import AuthIdentity from './AuthIdentity.tsx';
 import AuthSummary from './AuthSummary.tsx';
 import SwipeToConfirm from './SwipeToConfirm.tsx';
+import { SheetDragContext } from './Sheet.tsx';
 
 export const AUTH_SUCCESS_FADE_DURATION = 100;
 
@@ -76,8 +78,6 @@ interface AuthRequestContentProps {
 	notice?: ReactNode;
 	/** First cards of the details view. */
 	detailsHeader?: ReactNode;
-	/** Shown below the swipe while the request is unanswered. */
-	footerExtra?: ReactNode;
 	onShowDetails: () => void;
 	onConfirm: () => Promise<void>;
 	/** Closes the success view. */
@@ -98,7 +98,6 @@ const AuthRequestContent = ({
 	testIDPrefix = 'ConfirmAuth',
 	notice,
 	detailsHeader,
-	footerExtra,
 	onShowDetails,
 	onConfirm,
 	onDone,
@@ -113,6 +112,7 @@ const AuthRequestContent = ({
 		[capabilities, encryptionApproved],
 	);
 	const identityOnly = !capabilities.some(capability => capability.permission.length > 0);
+	const sheetDrag = useContext(SheetDragContext);
 	const checkOpacity = useSharedValue(0);
 	const checkScale = useSharedValue(0.5);
 	const checkStyle = useAnimatedStyle(() => ({
@@ -127,139 +127,174 @@ const AuthRequestContent = ({
 		}
 	}, [checkOpacity, checkScale, isAuthorized]);
 
-	return (
-		<>
+	useEffect(() => {
+		sheetDrag?.scrollOffset.set(0);
+	}, [sheetDrag, view]);
+
+	const bodyProps = { testID: `${testIDPrefix}DetailsScrollView`, onAccessibilityEscape: onEscape };
+	// In a draggable sheet the basic view does not scroll, so a drag anywhere on it closes the
+	// sheet; the details scroll alongside the drag, which only moves the sheet from the top.
+	const renderBody = (children: ReactNode): ReactElement =>
+		!sheetDrag ? (
 			<ScrollView
 				key={view}
-				testID={`${testIDPrefix}DetailsScrollView`}
+				{...bodyProps}
 				style={styles.scroll}
 				contentContainerStyle={styles.scrollContent}
-				onAccessibilityEscape={onEscape}
 			>
-				{!isAuthorized && notice}
-				{isAuthorized ? (
-					<>
-						<AuthSummary capabilities={approvedCapabilities} authorized />
-						<View style={styles.hero}>
-							<Animated.View style={checkStyle}>
-								<CheckCircle colorName="pubkyApp" size={96} strokeWidth={1} />
-							</Animated.View>
-							<AuthIdentity name={name} pubky={pubky} />
-						</View>
-					</>
-				) : view === 'details' ? (
-					<>
-						<View style={styles.cards}>
-							{detailsHeader}
-							<PermissionCard
-								testID={
-									identityOnly ? `${testIDPrefix}IdentityVerification` : `${testIDPrefix}RequestedPermissions`
-								}
-							>
-								{identityOnly ? (
-									<>
-										<TextXsM style={styles.sectionTitle}>{t('auth.identityVerification')}</TextXsM>
+				{children}
+			</ScrollView>
+		) : view === 'details' ? (
+			<GestureScrollView
+				key={view}
+				{...bodyProps}
+				style={styles.scroll}
+				contentContainerStyle={styles.scrollContent}
+				simultaneousWith={sheetDrag.gesture}
+				overScrollMode="never"
+				bounces={false}
+				scrollEventThrottle={16}
+				onScroll={event => sheetDrag.scrollOffset.set(event.nativeEvent.contentOffset.y)}
+			>
+				{children}
+			</GestureScrollView>
+		) : (
+			<View key={view} {...bodyProps} style={[styles.scroll, styles.scrollContent]}>
+				{children}
+			</View>
+		);
+
+	return (
+		<>
+			{renderBody(
+				<>
+					{!isAuthorized && notice}
+					{isAuthorized ? (
+						<>
+							<AuthSummary capabilities={approvedCapabilities} authorized />
+							<View style={styles.hero}>
+								<Animated.View style={checkStyle}>
+									<CheckCircle colorName="pubkyApp" size={96} strokeWidth={1} />
+								</Animated.View>
+								<AuthIdentity name={name} pubky={pubky} />
+							</View>
+						</>
+					) : view === 'details' ? (
+						<>
+							<View style={styles.cards}>
+								{detailsHeader}
+								<PermissionCard
+									testID={
+										identityOnly
+											? `${testIDPrefix}IdentityVerification`
+											: `${testIDPrefix}RequestedPermissions`
+									}
+								>
+									{identityOnly ? (
+										<>
+											<TextXsM style={styles.sectionTitle}>{t('auth.identityVerification')}</TextXsM>
+											<View style={styles.permissionRow}>
+												<UserCheck size={16} />
+												<TextSmM colorName="foreground" style={styles.path}>
+													{t('auth.provePubkyControl')}
+												</TextSmM>
+											</View>
+										</>
+									) : (
+										<>
+											<View style={styles.permissionHeader}>
+												<TextXsM>{t('auth.folder')}</TextXsM>
+												<TextXsM>{t('auth.permissions')}</TextXsM>
+											</View>
+											<View style={styles.permissionList}>
+												{capabilities.map((capability, index) => (
+													<Permission
+														key={`${capability.path}:${index}`}
+														capability={capability}
+														encryptionApproved={encryptionApproved}
+													/>
+												))}
+											</View>
+										</>
+									)}
+								</PermissionCard>
+								{hasEncryption && (
+									<PermissionCard>
+										<TextXsM style={styles.sectionTitle}>{t('auth.encryptedData')}</TextXsM>
 										<View style={styles.permissionRow}>
-											<UserCheck size={16} />
-											<TextSmM colorName="foreground" style={styles.path}>
-												{t('auth.provePubkyControl')}
+											<Lock size={16} />
+											<TextSmM style={styles.path} colorName="foreground">
+												{t('auth.allowEncryptedData')}
+											</TextSmM>
+											<Pressable
+												testID="AuthEncryptionToggle"
+												accessibilityRole="switch"
+												accessibilityLabel={t('auth.allowEncryptedData')}
+												accessibilityState={{ checked: encryptionApproved, disabled: authorizing }}
+												disabled={authorizing}
+												hitSlop={12}
+												style={[
+													styles.encryptionSwitch,
+													{ backgroundColor: encryptionApproved ? theme.colors.blue : theme.colors.input },
+												]}
+												onPress={() => onEncryptionApprovedChange(!encryptionApproved)}
+											>
+												<View
+													style={[
+														styles.switchThumb,
+														{
+															backgroundColor: theme.colors.background,
+															transform: [{ translateX: encryptionApproved ? 16 : 0 }],
+														},
+													]}
+												/>
+											</Pressable>
+										</View>
+									</PermissionCard>
+								)}
+								{!!relay && (
+									<PermissionCard testID={`${testIDPrefix}Relay`}>
+										<TextXsM style={styles.sectionTitle}>{t('auth.relay')}</TextXsM>
+										<View style={styles.permissionRow}>
+											<Globe size={16} />
+											<TextSmM colorName="foreground" style={styles.path} selectable>
+												{relay}
 											</TextSmM>
 										</View>
-									</>
-								) : (
-									<>
-										<View style={styles.permissionHeader}>
-											<TextXsM>{t('auth.folder')}</TextXsM>
-											<TextXsM>{t('auth.permissions')}</TextXsM>
-										</View>
-										<View style={styles.permissionList}>
-											{capabilities.map((capability, index) => (
-												<Permission
-													key={`${capability.path}:${index}`}
-													capability={capability}
-													encryptionApproved={encryptionApproved}
-												/>
-											))}
-										</View>
-									</>
+									</PermissionCard>
 								)}
-							</PermissionCard>
-							{hasEncryption && (
-								<PermissionCard>
-									<TextXsM style={styles.sectionTitle}>{t('auth.encryptedData')}</TextXsM>
-									<View style={styles.permissionRow}>
-										<Lock size={16} />
-										<TextSmM style={styles.path} colorName="foreground">
-											{t('auth.allowEncryptedData')}
-										</TextSmM>
-										<Pressable
-											testID="AuthEncryptionToggle"
-											accessibilityRole="switch"
-											accessibilityLabel={t('auth.allowEncryptedData')}
-											accessibilityState={{ checked: encryptionApproved, disabled: authorizing }}
-											disabled={authorizing}
-											hitSlop={12}
-											style={[
-												styles.encryptionSwitch,
-												{ backgroundColor: encryptionApproved ? theme.colors.blue : theme.colors.input },
-											]}
-											onPress={() => onEncryptionApprovedChange(!encryptionApproved)}
-										>
-											<View
-												style={[
-													styles.switchThumb,
-													{
-														backgroundColor: theme.colors.background,
-														transform: [{ translateX: encryptionApproved ? 16 : 0 }],
-													},
-												]}
-											/>
-										</Pressable>
+							</View>
+							<View style={styles.spacer} />
+							<TextSmM>
+								{t(
+									identityOnly
+										? 'auth.identityVerificationWarning'
+										: hasEncryption
+											? 'auth.encryptionTrustWarning'
+											: 'auth.trustWarning',
+								)}
+							</TextSmM>
+						</>
+					) : (
+						<>
+							<AuthSummary capabilities={approvedCapabilities} authorized={false} />
+							<View style={styles.hero}>
+								<View style={styles.shieldContainer}>
+									<Image
+										source={require('../images/shield.png')}
+										style={styles.shield}
+										resizeMode="contain"
+										accessibilityIgnoresInvertColors
+									/>
+									<View style={styles.shieldIdentity}>
+										<AuthIdentity name={name} pubky={pubky} />
 									</View>
-								</PermissionCard>
-							)}
-							{!!relay && (
-								<PermissionCard testID={`${testIDPrefix}Relay`}>
-									<TextXsM style={styles.sectionTitle}>{t('auth.relay')}</TextXsM>
-									<View style={styles.permissionRow}>
-										<Globe size={16} />
-										<TextSmM colorName="foreground" style={styles.path} selectable>
-											{relay}
-										</TextSmM>
-									</View>
-								</PermissionCard>
-							)}
-						</View>
-						<View style={styles.spacer} />
-						<TextSmM>
-							{t(
-								identityOnly
-									? 'auth.identityVerificationWarning'
-									: hasEncryption
-										? 'auth.encryptionTrustWarning'
-										: 'auth.trustWarning',
-							)}
-						</TextSmM>
-					</>
-				) : (
-					<>
-						<AuthSummary capabilities={approvedCapabilities} authorized={false} />
-						<View style={styles.hero}>
-							<View style={styles.shieldContainer}>
-								<Image
-									source={require('../images/shield.png')}
-									style={styles.shield}
-									resizeMode="contain"
-									accessibilityIgnoresInvertColors
-								/>
-								<View style={styles.shieldIdentity}>
-									<AuthIdentity name={name} pubky={pubky} />
 								</View>
 							</View>
-						</View>
-					</>
-				)}
-			</ScrollView>
+						</>
+					)}
+				</>,
+			)}
 
 			<View style={styles.footer}>
 				{!isAuthorized &&
@@ -293,7 +328,6 @@ const AuthRequestContent = ({
 						onConfirm={onConfirm}
 					/>
 				)}
-				{!isAuthorized && footerExtra}
 			</View>
 		</>
 	);

@@ -1,4 +1,4 @@
-import React, { memo, ReactElement, ReactNode } from 'react';
+import React, { createContext, memo, ReactElement, ReactNode, useMemo } from 'react';
 import {
 	Platform,
 	Pressable,
@@ -11,6 +11,15 @@ import {
 } from 'react-native';
 import { useIsFocused, useNavigation, useNavigationState } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GestureDetector, type PanGesture, usePanGesture } from 'react-native-gesture-handler';
+import Animated, {
+	type SharedValue,
+	useAnimatedStyle,
+	useSharedValue,
+	withSpring,
+	withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import SafeAreaInset from './SafeAreaInset.tsx';
 import { LinearGradient, RadialGradient } from './LinearGradient.tsx';
 import { TextLgSb } from '../theme/typography.ts';
@@ -46,7 +55,23 @@ interface SheetProps extends SheetFrameProps, SheetScreenProps {}
 
 interface SheetCardProps extends SheetFrameProps {
 	onBackdropPress: () => void;
+	/** Lets a downward drag anywhere on the card close it, like a native sheet. */
+	onDragDismiss?: () => void;
 }
+
+/**
+ * Set inside a draggable SheetCard. A scroll view in the card runs alongside the
+ * drag and reports its offset, so a drag only moves the card from the top of the scroll.
+ */
+export const SheetDragContext = createContext<{
+	gesture: PanGesture;
+	scrollOffset: SharedValue<number>;
+} | null>(null);
+
+const DRAG_ACTIVE_OFFSET = 10;
+const DRAG_DISMISS_FRACTION = 0.25;
+const DRAG_DISMISS_VELOCITY = 1000;
+const DRAG_CLOSE_MS = 200;
 
 type SheetLayoutProps = Omit<SheetScreenProps, 'id' | 'showBackButton'> & {
 	/** Prefix for the back button and title test IDs. */
@@ -58,11 +83,87 @@ const gradientColors: Record<Exclude<GradientType, 'none'>, string[]> = {
 	danger: ['#E95164', '#000000'],
 };
 
-/** The bottom card Android uses when it cannot present a native form sheet. */
-export const SheetCard = ({ children, onBackdropPress }: SheetCardProps): ReactElement => {
+const useCardHeight = (): number => {
 	const { height: windowHeight } = useWindowDimensions();
 	const insets = useSafeAreaInsets();
-	const cardHeight = windowHeight - insets.top - HEADER_HEIGHT;
+	return windowHeight - insets.top - HEADER_HEIGHT;
+};
+
+const DraggableSheetCard = ({
+	children,
+	onBackdropPress,
+	onDragDismiss,
+}: SheetCardProps & { onDragDismiss: () => void }): ReactElement => {
+	const cardHeight = useCardHeight();
+	const offset = useSharedValue(0);
+	const tracking = useSharedValue(false);
+	const closing = useSharedValue(false);
+	const scrollOffset = useSharedValue(0);
+
+	const gesture = usePanGesture({
+		testID: 'SheetDragPan',
+		activeOffsetY: DRAG_ACTIVE_OFFSET,
+		failOffsetX: [-DRAG_ACTIVE_OFFSET, DRAG_ACTIVE_OFFSET],
+		onActivate: () => {
+			tracking.set(!closing.get() && scrollOffset.get() <= 0);
+		},
+		onUpdate: event => {
+			if (tracking.get()) offset.set(Math.max(0, event.translationY));
+		},
+		onDeactivate: event => {
+			if (!tracking.get()) return;
+			tracking.set(false);
+			const flung = event.velocityY > DRAG_DISMISS_VELOCITY && event.translationY > 0;
+			if (!event.canceled && (flung || event.translationY > cardHeight * DRAG_DISMISS_FRACTION)) {
+				closing.set(true);
+				offset.set(
+					withTiming(cardHeight, { duration: DRAG_CLOSE_MS }, finished => {
+						if (finished) scheduleOnRN(onDragDismiss);
+					}),
+				);
+			} else {
+				offset.set(withSpring(0));
+			}
+		},
+		onFinalize: () => {
+			if (!closing.get() && !tracking.get()) offset.set(withSpring(0));
+		},
+	});
+
+	const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateY: offset.get() }] }));
+	const backdropStyle = useAnimatedStyle(() => ({
+		opacity: cardHeight > 0 ? Math.max(0, 1 - offset.get() / cardHeight) : 1,
+	}));
+	const context = useMemo(() => ({ gesture, scrollOffset }), [gesture, scrollOffset]);
+
+	return (
+		<View style={styles.androidRoot}>
+			<Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
+				<Pressable style={styles.backdrop} testID="SheetBackdrop" onPress={onBackdropPress} />
+			</Animated.View>
+			<GestureDetector gesture={gesture}>
+				<Animated.View
+					style={[styles.androidCard, { height: cardHeight }, cardStyle]}
+					testID="SheetDraggableCard"
+				>
+					<SheetDragContext.Provider value={context}>{children}</SheetDragContext.Provider>
+				</Animated.View>
+			</GestureDetector>
+		</View>
+	);
+};
+
+/** The bottom card Android uses when it cannot present a native form sheet. */
+export const SheetCard = ({ children, onBackdropPress, onDragDismiss }: SheetCardProps): ReactElement => {
+	const cardHeight = useCardHeight();
+
+	if (onDragDismiss) {
+		return (
+			<DraggableSheetCard onBackdropPress={onBackdropPress} onDragDismiss={onDragDismiss}>
+				{children}
+			</DraggableSheetCard>
+		);
+	}
 
 	return (
 		<View style={styles.androidRoot}>

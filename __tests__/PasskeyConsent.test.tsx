@@ -1,6 +1,8 @@
 import React from 'react';
 import { BackHandler } from 'react-native';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { GestureHandlerRootView, State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { err, ok } from '@synonymdev/result';
 import PasskeyConsent from '../src/screens/PasskeyConsent';
 import { approvePasskeyRequest, preparePasskeyRequest } from '../src/passkey/request';
@@ -49,20 +51,33 @@ jest.mock('styled-components/native', () => ({
 }));
 jest.mock('react-native-reanimated', () => ({
 	__esModule: true,
-	default: { View: require('react-native').View },
-	useSharedValue: (initialValue: number) =>
+	default: { View: require('react-native').View, createAnimatedComponent: (component: unknown) => component },
+	useSharedValue: (initialValue: unknown) =>
 		require('react').useState(() => ({
 			value: initialValue,
 			get() {
 				return this.value;
 			},
-			set(value: number) {
+			set(value: unknown) {
 				this.value = value;
 			},
 		}))[0],
 	useAnimatedStyle: () => ({}),
-	withTiming: (value: number) => value,
+	withSpring: (value: number) => value,
+	withTiming: (value: number, _config?: unknown, callback?: (finished: boolean) => void) => {
+		callback?.(true);
+		return value;
+	},
 	withSequence: (...values: number[]) => values.at(-1),
+	isSharedValue: () => false,
+	isWorkletFunction: () => false,
+	useHandler: () => ({ context: {} }),
+	useEvent: () => jest.fn(),
+	useComposedEventHandler: () => undefined,
+}));
+jest.mock('react-native-worklets', () => ({
+	scheduleOnRN: (callback: () => void) => callback(),
+	scheduleOnUI: jest.fn(),
 }));
 jest.mock('@react-navigation/native', () => ({}));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }));
@@ -155,8 +170,23 @@ const renderConsent = async (
 	capabilities: AuthCapability[] = [{ path: '/pub/pubky.app/', permission: 'rw' }],
 ) => {
 	jest.mocked(preparePasskeyRequest).mockResolvedValue(ok(prepared(capabilities)) as never);
-	render(<PasskeyConsent {...props} />);
+	render(
+		<GestureHandlerRootView>
+			<PasskeyConsent {...props} />
+		</GestureHandlerRootView>,
+	);
 	await act(async () => {});
+};
+
+const drag = (translationY: number, velocityY = 0): void => {
+	act(() => {
+		fireGestureHandler(getByGestureTestId('SheetDragPan'), [
+			{ state: State.BEGAN, translationY: 0 },
+			{ state: State.ACTIVE, translationY: 12 },
+			{ state: State.ACTIVE, translationY },
+			{ state: State.END, translationY, velocityY },
+		]);
+	});
 };
 
 const swipe = async (): Promise<void> => {
@@ -241,10 +271,33 @@ describe('PasskeyConsent', () => {
 		expect(cancelPasskeyRequest).toHaveBeenCalledWith('request-1', 'User cancelled');
 	});
 
-	it('keeps Deny, because the Android activity cannot be swiped away', async () => {
+	it('has no Deny: dragging the sheet down cancels instead', async () => {
 		await renderConsent();
-		fireEvent.press(screen.getByTestId('PasskeyConsentDeny'));
-		expect(cancelPasskeyRequest).toHaveBeenCalledWith('request-1', 'User denied');
+		expect(screen.queryByText('auth.deny')).toBeNull();
+		expect(screen.getByTestId('PasskeyConsentDetailsScrollView').type).toBe('View');
+		drag(100);
+		expect(cancelPasskeyRequest).not.toHaveBeenCalled();
+		drag(400);
+		expect(cancelPasskeyRequest).toHaveBeenCalledWith('request-1', 'User cancelled');
+	});
+
+	it('cancels on a quick downward fling', async () => {
+		await renderConsent();
+		drag(60, 1500);
+		expect(cancelPasskeyRequest).toHaveBeenCalledWith('request-1', 'User cancelled');
+	});
+
+	it('scrolls the details first and closes only from the top', async () => {
+		await renderConsent();
+		fireEvent.press(screen.getByTestId('PasskeyConsentShowDetailsButton'));
+		const details = screen.getByTestId('PasskeyConsentDetailsScrollView');
+		expect(details.type).toBe('RCTScrollView');
+		fireEvent.scroll(details, { nativeEvent: { contentOffset: { x: 0, y: 120 } } });
+		drag(400);
+		expect(cancelPasskeyRequest).not.toHaveBeenCalled();
+		fireEvent.scroll(details, { nativeEvent: { contentOffset: { x: 0, y: 0 } } });
+		drag(400);
+		expect(cancelPasskeyRequest).toHaveBeenCalledWith('request-1', 'User cancelled');
 	});
 
 	it('cancels when the backdrop is tapped', async () => {
@@ -317,7 +370,11 @@ describe('PasskeyConsent', () => {
 		jest
 			.mocked(preparePasskeyRequest)
 			.mockResolvedValue(err(new PasskeyRequestRejection('client_id_mismatch')));
-		render(<PasskeyConsent {...props} />);
+		render(
+			<GestureHandlerRootView>
+				<PasskeyConsent {...props} />
+			</GestureHandlerRootView>,
+		);
 		await act(async () => {});
 		expect(screen.getByText('passkey.errorTitle')).toBeTruthy();
 		expect(

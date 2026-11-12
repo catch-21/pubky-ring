@@ -36,7 +36,8 @@ type State =
 
 /**
  * The Authorize sheet (ConfirmAuth) for a passkey request, hosted by the Android
- * PasskeyConsentActivity. The activity is not a draggable sheet, so Deny stays.
+ * PasskeyConsentActivity. Dragging the sheet down, back and a tap outside it all
+ * cancel the request, so there is no Deny button.
  */
 const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 	const { t } = useTranslation();
@@ -149,12 +150,10 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 		await authorize(request, approval);
 	}, [approvedCapabilities, authorize, hasEncryption, request]);
 
-	const deny = useCallback(() => cancel('User denied'), [cancel]);
-
 	if (state.status === 'loading' || state.status === 'error') {
 		const failed = state.status === 'error';
 		return (
-			<SheetCard onBackdropPress={dismiss}>
+			<SheetCard onBackdropPress={dismiss} onDragDismiss={dismiss}>
 				<SheetLayout
 					id="passkey"
 					title={t(failed ? 'passkey.errorTitle' : 'auth.authorize')}
@@ -187,7 +186,7 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 
 	const authorizing = state.status === 'authorizing';
 	return (
-		<SheetCard onBackdropPress={dismiss}>
+		<SheetCard onBackdropPress={dismiss} onDragDismiss={dismiss}>
 			<SheetLayout
 				id="passkey"
 				title={t('auth.authorize')}
@@ -223,20 +222,9 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 							<TextSmM style={styles.note}>{t('passkey.verifiedByBrowser')}</TextSmM>
 						</PermissionCard>
 					}
-					footerExtra={
-						<Button
-							text={t('auth.deny')}
-							size="large"
-							style={authRequestStyles.fullWidthButton}
-							variant="secondary"
-							disabled={authorizing}
-							testID="PasskeyConsentDeny"
-							onPress={deny}
-						/>
-					}
 					onShowDetails={() => setShowDetails(true)}
 					onConfirm={handleApprove}
-					onEscape={deny}
+					onEscape={dismiss}
 				/>
 				<SafeAreaInset edge="bottom" />
 			</SheetLayout>

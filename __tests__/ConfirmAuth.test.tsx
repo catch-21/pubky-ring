@@ -104,6 +104,7 @@ jest.mock('react-native-reanimated', () => ({
 	withSequence: (...values: number[]) => values.at(-1),
 }));
 
+jest.mock('react-native-worklets', () => ({ scheduleOnRN: (callback: () => void) => callback() }));
 jest.mock('@react-navigation/native', () => ({
 	useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, [effect]),
 	useNavigation: () => ({ goBack: mockGoBack }),
