@@ -20,16 +20,12 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     let prfInput: Data?
   }
 
-  /// How long the success state shows before the sheet closes, as on Android (PASSKEY_SUCCESS_MS).
-  private static let successNanoseconds: UInt64 = 400_000_000
-
   private let model = PasskeyConsentModel()
   private var pending: PendingRequest?
   private var listRequest: ListRequest?
   private var isConfiguring = false
   private var hasFailed = false
   private var isFinished = false
-  private var endSuccess: CheckedContinuation<Void, Never>?
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -40,8 +36,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         model: model,
         onApprove: { [weak self] in self?.approve() },
         onDeny: { [weak self] in self?.deny() },
-        onChoose: { [weak self] in self?.choose(pubky: $0) },
-        onFinish: { [weak self] in self?.finishSuccess() }))
+        onChoose: { [weak self] in self?.choose(pubky: $0) }))
     host.overrideUserInterfaceStyle = .dark
     host.view.backgroundColor = .clear
     addChild(host)
@@ -174,9 +169,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         let credential = ASPasskeyAssertionCredential(
           userHandle: Data(pending.identity.pubky.utf8), relyingParty: pending.rpId, signature: signature,
           clientDataHash: pending.clientDataHash, authenticatorData: authenticatorData, credentialID: credentialId)
-        // The grant is already with the website; show Ring's success state before handing back.
-        model.phase = .authorised
-        await showSuccess()
+        // The website signs in as soon as it has the grant, so hand the assertion back at once.
         isFinished = true
         extensionContext.completeAssertionRequest(using: credential) { _ in }
       } catch PasskeyApprover.Failure.deviceAuthFailed {
@@ -191,27 +184,12 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     }
   }
 
-  private func showSuccess() async {
-    await withCheckedContinuation { continuation in
-      endSuccess = continuation
-      Task { @MainActor [weak self] in
-        try? await Task.sleep(nanoseconds: Self.successNanoseconds)
-        self?.finishSuccess()
-      }
-    }
-  }
-
-  private func finishSuccess() {
-    endSuccess?.resume()
-    endSuccess = nil
-  }
-
   private func deny() {
     if isConfiguring {
       extensionContext.completeExtensionConfigurationRequest()
       return
     }
-    guard !isFinished, model.phase != .authorised else { return }
+    guard !isFinished else { return }
     isFinished = true
     extensionContext.cancelRequest(withError: ASExtensionError(hasFailed ? .failed : .userCanceled))
   }

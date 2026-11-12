@@ -179,10 +179,7 @@ describe('PasskeyConsent', () => {
 		mockAlwaysShowDetails = false;
 		jest.mocked(getAutoAuthFromStore).mockReturnValue(false);
 		jest.spyOn(BackHandler, 'addEventListener').mockReturnValue({ remove: jest.fn() });
-		jest.mocked(approvePasskeyRequest).mockImplementation(async ({ onApproved }) => {
-			await onApproved?.();
-			return ok('success');
-		});
+		jest.mocked(approvePasskeyRequest).mockResolvedValue(ok('success') as never);
 	});
 
 	afterEach(() => {
@@ -269,12 +266,12 @@ describe('PasskeyConsent', () => {
 		expect(cancelPasskeyRequest).toHaveBeenCalledWith('request-1', 'Consent timed out');
 	});
 
-	it('shows the ConfirmAuth success state before handing the assertion back', async () => {
+	it('hands the assertion back straight after the swipe, with no success state', async () => {
 		let release!: () => void;
 		jest.mocked(approvePasskeyRequest).mockImplementationOnce(
-			({ onApproved }) =>
+			() =>
 				new Promise(resolve => {
-					release = () => onApproved!().then(() => resolve(ok('success')));
+					release = () => resolve(ok('success'));
 				}),
 		);
 		await renderConsent();
@@ -284,33 +281,11 @@ describe('PasskeyConsent', () => {
 		);
 		expect(screen.getByTestId('PasskeyConsentAuthorizeButton')).toBeDisabled();
 		expect(screen.queryByTestId('PasskeyTimer')).toBeNull();
-		expect(screen.getByTestId('PasskeyConsentDeny')).toBeDisabled();
-		let finished = false;
 		await act(async () => {
 			release();
 		});
-		expect(screen.getByText('auth.authorizedTitle')).toBeTruthy();
-		expect(screen.getByTestId('mock-auth-summary').props.authorized).toBe(true);
-		expect(screen.queryByTestId('PasskeyConsentDeny')).toBeNull();
-		jest.mocked(approvePasskeyRequest).mock.results[0].value.then(() => {
-			finished = true;
-		});
-		await act(async () => {
-			fireEvent.press(screen.getByTestId('PasskeyConsentSuccessButton'));
-		});
-		expect(finished).toBe(true);
-		expect(cancelPasskeyRequest).not.toHaveBeenCalled();
-	});
-
-	it('finishes the success state by itself after 400 ms', async () => {
-		await renderConsent();
-		await swipe();
-		expect(screen.getByText('auth.authorizedTitle')).toBeTruthy();
-		const result = jest.mocked(approvePasskeyRequest).mock.results[0].value;
-		await act(async () => {
-			jest.advanceTimersByTime(400);
-			await result;
-		});
+		expect(screen.queryByText('auth.authorizedTitle')).toBeNull();
+		expect(screen.queryByTestId('PasskeyConsentSuccessButton')).toBeNull();
 		hardwareBack();
 		expect(cancelPasskeyRequest).not.toHaveBeenCalled();
 	});
@@ -356,6 +331,7 @@ describe('PasskeyConsent', () => {
 		jest.mocked(getAutoAuthFromStore).mockReturnValue(true);
 		await renderConsent();
 		expect(approvePasskeyRequest).toHaveBeenCalledTimes(1);
-		expect(screen.queryByTestId('PasskeyConsentShowDetailsButton')).toBeNull();
+		expect(screen.getByTestId('PasskeyConsentAuthorizeButton')).toBeDisabled();
+		expect(cancelPasskeyRequest).not.toHaveBeenCalled();
 	});
 });

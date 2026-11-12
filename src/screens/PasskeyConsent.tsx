@@ -15,10 +15,7 @@ import PermissionCard from '../components/PermissionCard.tsx';
 import CircularProgressBar from '../components/CircularProgressBar.tsx';
 import SafeAreaInset from '../components/SafeAreaInset.tsx';
 import { SheetCard, SheetLayout } from '../components/Sheet.tsx';
-import AuthRequestContent, {
-	AUTH_SUCCESS_FADE_DURATION,
-	authRequestStyles,
-} from '../components/AuthRequestContent.tsx';
+import AuthRequestContent, { authRequestStyles } from '../components/AuthRequestContent.tsx';
 import { Globe, Shield } from '../icons/index.ts';
 import { cancelPasskeyRequest } from '../passkey/native';
 import {
@@ -30,15 +27,12 @@ import {
 } from '../passkey/request';
 
 const PASSKEY_CONSENT_TIMEOUT_MS = 60000;
-// ConfirmAuth shows its success state for this long before returning to the calling app.
-const PASSKEY_SUCCESS_MS = AUTH_SUCCESS_FADE_DURATION + 300;
 
 type State =
 	| { status: 'loading' }
 	| { status: 'error'; message: string }
 	| { status: 'consent'; request: PreparedPasskeyRequest }
-	| { status: 'authorizing'; request: PreparedPasskeyRequest }
-	| { status: 'authorized'; request: PreparedPasskeyRequest };
+	| { status: 'authorizing'; request: PreparedPasskeyRequest };
 
 /**
  * The Authorize sheet (ConfirmAuth) for a passkey request, hosted by the Android
@@ -53,7 +47,6 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 	const [encryptionApproved, setEncryptionApproved] = useState(true);
 	const finished = useRef(false);
 	const activeAuth = useRef<AbortController | null>(null);
-	const endSuccess = useRef<(() => void) | null>(null);
 
 	const cancel = useCallback(
 		(message: string) => {
@@ -64,8 +57,6 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 		},
 		[props.requestId],
 	);
-
-	const finishSuccess = useCallback(() => endSuccess.current?.(), []);
 
 	const authorize = useCallback(
 		async (request: PreparedPasskeyRequest, approvedCapabilities?: string) => {
@@ -78,19 +69,6 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 				dispatch,
 				approvedCapabilities,
 				signal: controller.signal,
-				onApproved: async () => {
-					if (controller.signal.aborted || finished.current) return;
-					setState({ status: 'authorized', request });
-					await new Promise<void>(resolve => {
-						const done = (): void => {
-							clearTimeout(timer);
-							endSuccess.current = null;
-							resolve();
-						};
-						const timer = setTimeout(done, PASSKEY_SUCCESS_MS);
-						endSuccess.current = done;
-					});
-				},
 			});
 			if (controller.signal.aborted || finished.current) return;
 			if (res.isOk()) {
@@ -132,13 +110,7 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 		};
 	}, [authorize, props, t]);
 
-	const dismiss = useCallback(() => {
-		if (state.status === 'authorized') {
-			finishSuccess();
-			return;
-		}
-		cancel('User cancelled');
-	}, [cancel, finishSuccess, state.status]);
+	const dismiss = useCallback(() => cancel('User cancelled'), [cancel]);
 
 	useEffect(() => {
 		const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -214,12 +186,11 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 	}
 
 	const authorizing = state.status === 'authorizing';
-	const isAuthorized = state.status === 'authorized';
 	return (
 		<SheetCard onBackdropPress={dismiss}>
 			<SheetLayout
 				id="passkey"
-				title={t(isAuthorized ? 'auth.authorizedTitle' : 'auth.authorize')}
+				title={t('auth.authorize')}
 				titleTestID="PasskeyConsentTitle"
 				showBottomSafeAreaInset={false}
 				onBackPress={showDetails && state.status === 'consent' ? () => setShowDetails(false) : undefined}
@@ -230,7 +201,7 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 				}
 			>
 				<AuthRequestContent
-					view={isAuthorized ? 'success' : showDetails ? 'details' : 'basic'}
+					view={showDetails ? 'details' : 'basic'}
 					pubky={state.request.storeKey}
 					name={pubkyName}
 					capabilities={capabilities}
@@ -265,7 +236,6 @@ const PasskeyConsent = (props: PasskeyRequestProps): ReactElement => {
 					}
 					onShowDetails={() => setShowDetails(true)}
 					onConfirm={handleApprove}
-					onDone={finishSuccess}
 					onEscape={deny}
 				/>
 				<SafeAreaInset edge="bottom" />

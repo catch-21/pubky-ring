@@ -80,7 +80,8 @@ interface AuthRequestContentProps {
 	footerExtra?: ReactNode;
 	onShowDetails: () => void;
 	onConfirm: () => Promise<void>;
-	onDone: () => void;
+	/** Closes the success view. */
+	onDone?: () => void;
 	onEscape?: () => void;
 }
 

@@ -90,12 +90,11 @@ struct RingIdentityPill: View {
 /// AuthSummary: one sentence whose scope and "encrypted" runs are bold.
 struct RingAuthSummary: View {
   let capabilities: [AuthCapability]
-  let authorised: Bool
 
   var body: some View {
     let regular = RingTextStyle.summary
     let bold = RingTextStyle.summaryBold
-    let runs = AuthSummaryText.runs(capabilities: capabilities, authorised: authorised, t: RingStrings.t)
+    let runs = AuthSummaryText.runs(capabilities: capabilities, authorised: false, t: RingStrings.t)
     runs.reduce(Text(verbatim: "")) { text, run in
       text
         + Text(verbatim: run.text)
@@ -148,22 +147,6 @@ struct RingTimer: View {
         withAnimation(.linear(duration: duration)) { progress = 0 }
       }
       .accessibilityHidden(true)
-  }
-}
-
-/// The success check: fades in over 100 ms and grows from half size over 300 ms.
-struct RingSuccessCheck: View {
-  @State private var opacity = 0.0
-  @State private var scale: CGFloat = 0.5
-
-  var body: some View {
-    RingIconView(icon: .circleCheck, size: 96, colour: RingColour.pubkyApp, strokeWidth: 1)
-      .opacity(opacity)
-      .scaleEffect(scale)
-      .onAppear {
-        withAnimation(.linear(duration: 0.1)) { opacity = 1 }
-        withAnimation(RingMotion.timing) { scale = 1 }
-      }
   }
 }
 

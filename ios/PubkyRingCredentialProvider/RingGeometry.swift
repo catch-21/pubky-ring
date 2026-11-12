@@ -280,13 +280,12 @@ enum RingSVGPath {
 
 /// The Lucide icons Ring's Authorize sheet uses (lucide-react-native 1.28, 24×24, stroke 2, round caps).
 enum RingIcon: CaseIterable {
-  case arrowLeft, circleCheck, eye, folder, globe, keyRound, list, lock, pencil, shield, userRoundCheck
+  case arrowLeft, eye, folder, globe, keyRound, list, lock, pencil, shield, userRoundCheck
 
   /// Stroked outlines, plus any shapes Lucide fills with currentColor.
   var paths: (stroke: [String], fill: [String]) {
     switch self {
     case .arrowLeft: return (["m12 19-7-7 7-7", "M19 12H5"], [])
-    case .circleCheck: return ([Self.circle(12, 12, 10), "m9 12 2 2 4-4"], [])
     case .eye:
       return (
         [

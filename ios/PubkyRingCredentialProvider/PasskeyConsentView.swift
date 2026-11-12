@@ -9,7 +9,6 @@ final class PasskeyConsentModel: ObservableObject {
     case choosing
     case consent
     case authorising
-    case authorised
     case failed(String)
     /// The extension was opened from Settings to finish setting it up.
     case info
@@ -36,8 +35,8 @@ final class PasskeyConsentModel: ObservableObject {
   }
 }
 
-/// The Authorize sheet (ConfirmAuth) in SwiftUI: the same chrome, basic and details views, swipe to
-/// authorise and success state, in Ring's dark theme.
+/// The Authorize sheet (ConfirmAuth) in SwiftUI: the same chrome, basic and details views and swipe
+/// to authorise, in Ring's dark theme. There is no success state: the assertion goes back at once.
 struct PasskeyConsentView: View {
   static let consentTimeout: TimeInterval = 60
 
@@ -45,9 +44,8 @@ struct PasskeyConsentView: View {
   let onApprove: () -> Void
   let onDeny: () -> Void
   let onChoose: (String) -> Void
-  let onFinish: () -> Void
 
-  private enum RequestView: Hashable { case basic, details, success }
+  private enum RequestView: Hashable { case basic, details }
 
   private var t: (String, [String: String]) -> String { RingStrings.t }
 
@@ -76,7 +74,6 @@ struct PasskeyConsentView: View {
 
   private var title: String {
     switch model.phase {
-    case .authorised: return t("auth.authorizedTitle", [:])
     case .failed: return t("passkey.errorTitle", [:])
     case .info: return t("passkey.setup.title", [:])
     case .choosing: return t("pubky.selectPubky", [:])
@@ -127,7 +124,7 @@ struct PasskeyConsentView: View {
       messageLayout(t("passkey.setup.message", [:]), button: t("common.done", [:]))
     case .choosing:
       picker
-    case .consent, .authorising, .authorised:
+    case .consent, .authorising:
       if let identity = model.identity { request(identity) }
     }
   }
@@ -167,7 +164,7 @@ struct PasskeyConsentView: View {
 
   private func request(_ identity: ConsentIdentity) -> some View {
     let view: RequestView =
-      model.phase == .authorised ? .success : model.showDetails ? .details : .basic
+      model.showDetails ? .details : .basic
     let authorising = model.phase == .authorising
     return VStack(spacing: 0) {
       // Fill the sheet when the content fits (so the hero centres), scroll when it does not.
@@ -183,14 +180,10 @@ struct PasskeyConsentView: View {
           RingButton(title: t("auth.showDetails", [:]), icon: .list) { model.showDetails = true }
             .disabled(authorising)
         }
-        if view == .success {
-          RingButton(title: t("common.ok", [:]), variant: .secondary, action: onFinish)
-        } else {
-          RingSwipeToConfirm(
-            text: t(authorising ? "auth.authorizing" : "auth.swipeToAuthorize", [:]), loading: authorising,
-            onConfirm: onApprove)
-          RingButton(title: t("auth.deny", [:]), variant: .secondary, action: onDeny).disabled(authorising)
-        }
+        RingSwipeToConfirm(
+          text: t(authorising ? "auth.authorizing" : "auth.swipeToAuthorize", [:]), loading: authorising,
+          onConfirm: onApprove)
+        RingButton(title: t("auth.deny", [:]), variant: .secondary, action: onDeny).disabled(authorising)
       }
       .padding(.bottom, 12)
     }
@@ -199,15 +192,8 @@ struct PasskeyConsentView: View {
   @ViewBuilder private func requestBody(_ view: RequestView, identity: ConsentIdentity) -> some View {
     VStack(alignment: .leading, spacing: 0) {
       switch view {
-      case .success:
-        RingAuthSummary(capabilities: model.approvedCapabilities, authorised: true)
-        VStack(spacing: 24) {
-          RingSuccessCheck()
-          RingIdentityPill(identity: identity)
-        }
-        .frame(maxWidth: .infinity, minHeight: 200, maxHeight: .infinity)
       case .basic:
-        RingAuthSummary(capabilities: model.approvedCapabilities, authorised: false)
+        RingAuthSummary(capabilities: model.approvedCapabilities)
         ZStack {
           if let shield = UIImage(named: "shield") {
             Image(uiImage: shield).resizable().scaledToFit().accessibilityHidden(true)
@@ -328,8 +314,6 @@ struct PasskeyConsentView: View {
     switch model.phase {
     case .consent where model.showDetails:
       model.showDetails = false
-    case .authorised:
-      onFinish()
     case .authorising:
       break
     default:
