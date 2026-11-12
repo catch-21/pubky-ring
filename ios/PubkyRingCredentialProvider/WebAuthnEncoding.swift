@@ -5,12 +5,16 @@ import Foundation
 enum WebAuthnEncoding {
   private static let flagUserPresent: UInt8 = 0x01
   private static let flagUserVerified: UInt8 = 0x04
+  /// iOS rejects every other combination of these two bits with
+  /// "AuthData is missing a required flag", then Safari reports a cancellation.
+  private static let flagBackupEligible: UInt8 = 0x08
+  private static let flagBackupState: UInt8 = 0x10
   private static let flagAttestedData: UInt8 = 0x40
 
   /// rpIdHash | flags | signCount. signCount stays 0: ceremony keys never leave the device.
   static func authenticatorData(rpId: String, userVerified: Bool, attestedCredentialData: Data? = nil) -> Data {
     var data = Data(SHA256.hash(data: Data(rpId.utf8)))
-    var flags = flagUserPresent
+    var flags = flagUserPresent | flagBackupEligible | flagBackupState
     if userVerified { flags |= flagUserVerified }
     if attestedCredentialData != nil { flags |= flagAttestedData }
     data.append(flags)

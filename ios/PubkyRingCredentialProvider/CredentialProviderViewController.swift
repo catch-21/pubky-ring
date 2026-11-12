@@ -55,7 +55,9 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     else { return fail("This request is not a Pubky sign-in.") }
     var prfInput: Data?
     if #available(iOS 18.0, *) {
-      prfInput = request.assertionExtensionInput?.prf?.inputValues?.saltInput1
+      if case .assertion(let input) = request.extensionInput {
+        prfInput = input.prf?.inputValues?.saltInput1
+      }
     }
     start(
       rpId: identity.relyingPartyIdentifier, pubky: pubky, clientDataHash: request.clientDataHash,
@@ -147,7 +149,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         let credential = ASPasskeyAssertionCredential(
           userHandle: Data(pending.identity.pubky.utf8), relyingParty: pending.rpId, signature: signature,
           clientDataHash: pending.clientDataHash, authenticatorData: authenticatorData, credentialID: credentialId)
-        extensionContext.completeAssertionRequest(using: credential)
+        extensionContext.completeAssertionRequest(using: credential) { _ in }
       } catch PasskeyApprover.Failure.deviceAuthFailed {
         model.phase = .consent
       } catch {
@@ -208,7 +210,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         let credential = ASPasskeyRegistrationCredential(
           relyingParty: rpId, clientDataHash: request.clientDataHash, credentialID: credentialId,
           attestationObject: WebAuthnEncoding.noneAttestationObject(authData: authenticatorData))
-        await MainActor.run { extensionContext.completeRegistrationRequest(using: credential) }
+        extensionContext.completeRegistrationRequest(using: credential) { _ in }
       }
     } catch {
       extensionContext.cancelRequest(withError: ASExtensionError(.failed))

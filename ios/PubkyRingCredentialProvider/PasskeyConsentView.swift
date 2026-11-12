@@ -131,7 +131,7 @@ struct PasskeyConsentView: View {
   static func parseCapabilities(_ caps: String?) -> [(path: String, permission: String)] {
     (caps ?? "").split(separator: ",").compactMap { entry in
       guard let colon = entry.lastIndex(of: ":") else { return nil }
-      return (String(entry[..<colon]), String(entry[entry.index(after: colon)...]))
+      return (String(entry[..<colon]), String(entry[colon...].dropFirst()))
     }
   }
 }

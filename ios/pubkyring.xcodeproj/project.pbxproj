@@ -7,37 +7,86 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0905975ECE19575A4F666FA8 /* pubkycore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB441B2CC43F149CEF418F9C /* pubkycore.swift */; };
+		0E7A6A016AF3497F0F3C324A /* CredentialProviderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128F6CFA214072DA14A796F4 /* CredentialProviderViewController.swift */; };
 		1319212F6007D5772A620B61 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		1BC223875628A40CD99765EB /* PasskeyApprover.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5379ADE81FBB8AC59B2B8E /* PasskeyApprover.swift */; };
+		2113CB82987B0C3800F4797B /* PasskeyMailbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 457166694338FEC60A6040B0 /* PasskeyMailbox.swift */; };
 		4B1A7B8D2C3D4E5F00112233 /* AppInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 4B1A7B8C2C3D4E5F00112233 /* AppInfo.m */; };
 		4B1A7B8F2C3D4E5F00112233 /* SharedPubky.m in Sources */ = {isa = PBXBuildFile; fileRef = 4B1A7B8E2C3D4E5F00112233 /* SharedPubky.m */; };
 		70F9B56BE652426C904D16F4 /* InterTight-VariableFont_wght.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C21B8554B47148DBBCC60B15 /* InterTight-VariableFont_wght.ttf */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		761780EF2CA45674006654EF /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EE2CA45674006654EF /* SceneDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		825848A848D5E93B82BA431F /* PasskeyConsentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31E7F51405A0553BC282AF66 /* PasskeyConsentView.swift */; };
+		997A79D27D61A49BF1D68815 /* CeremonyKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30BC352E5225FE94ADD43FC5 /* CeremonyKeys.swift */; };
+		9AB8CE8342A923F4631DC8FD /* PasskeyEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88A03ED885CD4EEF2F3A7BC5 /* PasskeyEnvelope.swift */; };
+		9F27A3BE0F1D96203C06F50A /* WebAuthnEncoding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10FBAD3CF999FA907C1F8F13 /* WebAuthnEncoding.swift */; };
 		B10A00010000000000000001 /* DeviceAuthentication.m in Sources */ = {isa = PBXBuildFile; fileRef = B10A00020000000000000001 /* DeviceAuthentication.m */; };
-		B10A00010000000000000003 /* PubkyPasskey.m in Sources */ = {isa = PBXBuildFile; fileRef = B10A00020000000000000003 /* PubkyPasskey.m */; };
 		B10A00010000000000000002 /* PrivacyCover.m in Sources */ = {isa = PBXBuildFile; fileRef = B10A00020000000000000002 /* PrivacyCover.m */; };
+		B10A00010000000000000003 /* PubkyPasskey.m in Sources */ = {isa = PBXBuildFile; fileRef = B10A00020000000000000003 /* PubkyPasskey.m */; };
+		CCE50700B89A739AAB51DFA8 /* PasskeyShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD66BF3EC9F185C43A9F0693 /* PasskeyShared.swift */; };
 		F0B0F0C33BFC0AA7CD867F18 /* libPods-pubkyring.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F66FC2D5C5C4019367FA619 /* libPods-pubkyring.a */; };
+		F3EB65780CB20C0FA15A1534 /* PasskeyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13BD8DC7FD7B917566D4E162 /* PasskeyPolicy.swift */; };
+		FF57935DB01D234AB09C57FB /* PubkyRingCredentialProvider.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E66029D36EF838C4554CF966 /* PubkyRingCredentialProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		5B88B10D2805CB0E953FE76B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 60EB015F25EB410FB151BCB5;
+			remoteInfo = PubkyRingCredentialProvider;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AF4C742B2E80600EBEED2CF5 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				FF57935DB01D234AB09C57FB /* PubkyRingCredentialProvider.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0AB86494852B847B8E4D765F /* PubkyRingCredentialProvider.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = PubkyRingCredentialProvider.entitlements; sourceTree = "<group>"; };
+		10FBAD3CF999FA907C1F8F13 /* WebAuthnEncoding.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WebAuthnEncoding.swift; sourceTree = "<group>"; };
+		128F6CFA214072DA14A796F4 /* CredentialProviderViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CredentialProviderViewController.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* pubkyring.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = pubkyring.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = pubkyring/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = pubkyring/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = pubkyring/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		13BD8DC7FD7B917566D4E162 /* PasskeyPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PasskeyPolicy.swift; sourceTree = "<group>"; };
+		2C976249B40B0FCCF7E4261C /* PubkyCore.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; name = PubkyCore.xcframework; path = "../../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework"; sourceTree = "<group>"; };
+		30BC352E5225FE94ADD43FC5 /* CeremonyKeys.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CeremonyKeys.swift; sourceTree = "<group>"; };
+		31E7F51405A0553BC282AF66 /* PasskeyConsentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PasskeyConsentView.swift; sourceTree = "<group>"; };
+		457166694338FEC60A6040B0 /* PasskeyMailbox.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PasskeyMailbox.swift; sourceTree = "<group>"; };
 		4B1A7B8C2C3D4E5F00112233 /* AppInfo.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AppInfo.m; path = pubkyring/AppInfo.m; sourceTree = "<group>"; };
 		4B1A7B8E2C3D4E5F00112233 /* SharedPubky.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = SharedPubky.m; path = pubkyring/SharedPubky.m; sourceTree = "<group>"; };
 		4B1A7B902C3D4E5F00112233 /* pubkyring.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = pubkyring.entitlements; path = pubkyring/pubkyring.entitlements; sourceTree = "<group>"; };
 		5F66FC2D5C5C4019367FA619 /* libPods-pubkyring.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-pubkyring.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6E241E207B94CBE22DEDD203 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = pubkyring/AppDelegate.swift; sourceTree = "<group>"; };
 		761780EE2CA45674006654EF /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SceneDelegate.swift; path = pubkyring/SceneDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = pubkyring/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		88A03ED885CD4EEF2F3A7BC5 /* PasskeyEnvelope.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PasskeyEnvelope.swift; sourceTree = "<group>"; };
+		AF5379ADE81FBB8AC59B2B8E /* PasskeyApprover.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PasskeyApprover.swift; sourceTree = "<group>"; };
 		B10A00020000000000000001 /* DeviceAuthentication.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = DeviceAuthentication.m; path = pubkyring/DeviceAuthentication.m; sourceTree = "<group>"; };
-		B10A00020000000000000003 /* PubkyPasskey.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = PubkyPasskey.m; path = pubkyring/PubkyPasskey.m; sourceTree = "<group>"; };
 		B10A00020000000000000002 /* PrivacyCover.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = PrivacyCover.m; path = pubkyring/PrivacyCover.m; sourceTree = "<group>"; };
+		B10A00020000000000000003 /* PubkyPasskey.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = PubkyPasskey.m; path = pubkyring/PubkyPasskey.m; sourceTree = "<group>"; };
 		B10A00030000000000000001 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		C21B8554B47148DBBCC60B15 /* InterTight-VariableFont_wght.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "InterTight-VariableFont_wght.ttf"; path = "../assets/fonts/InterTight-VariableFont_wght.ttf"; sourceTree = "<group>"; };
+		CB441B2CC43F149CEF418F9C /* pubkycore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = pubkycore.swift; path = "../../node_modules/@synonymdev/react-native-pubky/ios/pubkycore.swift"; sourceTree = "<group>"; };
+		DD66BF3EC9F185C43A9F0693 /* PasskeyShared.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PasskeyShared.swift; sourceTree = "<group>"; };
+		E66029D36EF838C4554CF966 /* PubkyRingCredentialProvider.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PubkyRingCredentialProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E9BEEC22DDF3D2C7155A00F4 /* Pods-pubkyring.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-pubkyring.debug.xcconfig"; path = "Target Support Files/Pods-pubkyring/Pods-pubkyring.debug.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		FF42E8010883080C68665233 /* Pods-pubkyring.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-pubkyring.release.xcconfig"; path = "Target Support Files/Pods-pubkyring/Pods-pubkyring.release.xcconfig"; sourceTree = "<group>"; };
@@ -49,6 +98,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				F0B0F0C33BFC0AA7CD867F18 /* libPods-pubkyring.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		72BB220FC82E91026434E5EA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -79,8 +135,38 @@
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				5F66FC2D5C5C4019367FA619 /* libPods-pubkyring.a */,
+				EE125E50F79E21E81D01CF7F /* iOS */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		6106F778602FC45499124454 /* PubkyCore */ = {
+			isa = PBXGroup;
+			children = (
+				CB441B2CC43F149CEF418F9C /* pubkycore.swift */,
+				2C976249B40B0FCCF7E4261C /* PubkyCore.xcframework */,
+			);
+			name = PubkyCore;
+			sourceTree = "<group>";
+		};
+		6CDE7F2C34D9270280C4682E /* PubkyRingCredentialProvider */ = {
+			isa = PBXGroup;
+			children = (
+				30BC352E5225FE94ADD43FC5 /* CeremonyKeys.swift */,
+				128F6CFA214072DA14A796F4 /* CredentialProviderViewController.swift */,
+				AF5379ADE81FBB8AC59B2B8E /* PasskeyApprover.swift */,
+				31E7F51405A0553BC282AF66 /* PasskeyConsentView.swift */,
+				88A03ED885CD4EEF2F3A7BC5 /* PasskeyEnvelope.swift */,
+				457166694338FEC60A6040B0 /* PasskeyMailbox.swift */,
+				13BD8DC7FD7B917566D4E162 /* PasskeyPolicy.swift */,
+				DD66BF3EC9F185C43A9F0693 /* PasskeyShared.swift */,
+				10FBAD3CF999FA907C1F8F13 /* WebAuthnEncoding.swift */,
+				6E241E207B94CBE22DEDD203 /* Info.plist */,
+				0AB86494852B847B8E4D765F /* PubkyRingCredentialProvider.entitlements */,
+				6106F778602FC45499124454 /* PubkyCore */,
+			);
+			name = PubkyRingCredentialProvider;
+			path = PubkyRingCredentialProvider;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -100,6 +186,7 @@
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
 				8EC77A4C5B2943A2B5BB7061 /* Resources */,
 				B10A00030000000000000002 /* Config */,
+				6CDE7F2C34D9270280C4682E /* PubkyRingCredentialProvider */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -110,6 +197,7 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* pubkyring.app */,
+				E66029D36EF838C4554CF966 /* PubkyRingCredentialProvider.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -139,6 +227,13 @@
 			path = Pods;
 			sourceTree = "<group>";
 		};
+		EE125E50F79E21E81D01CF7F /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -153,15 +248,34 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				A922A2D323AD61F1033D48F9 /* [CP] Embed Pods Frameworks */,
 				FB6CDADF44D0A26D2D80A59D /* [CP] Copy Pods Resources */,
+				AF4C742B2E80600EBEED2CF5 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0BC52035A4B4A3E2AFE301F0 /* PBXTargetDependency */,
 			);
 			name = pubkyring;
 			productName = pubkyring;
 			productReference = 13B07F961A680F5B00A75B9A /* pubkyring.app */;
 			productType = "com.apple.product-type.application";
+		};
+		60EB015F25EB410FB151BCB5 /* PubkyRingCredentialProvider */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9259691410D68E18907C6EF8 /* Build configuration list for PBXNativeTarget "PubkyRingCredentialProvider" */;
+			buildPhases = (
+				63EB4FED45A91F6C94D6FB8D /* Sources */,
+				72BB220FC82E91026434E5EA /* Frameworks */,
+				50C779C7F0CD8C24218442E9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PubkyRingCredentialProvider;
+			productName = PubkyRingCredentialProvider;
+			productReference = E66029D36EF838C4554CF966 /* PubkyRingCredentialProvider.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -190,6 +304,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* pubkyring */,
+				60EB015F25EB410FB151BCB5 /* PubkyRingCredentialProvider */,
 			);
 		};
 /* End PBXProject section */
@@ -203,6 +318,13 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				1319212F6007D5772A620B61 /* PrivacyInfo.xcprivacy in Resources */,
 				70F9B56BE652426C904D16F4 /* InterTight-VariableFont_wght.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		50C779C7F0CD8C24218442E9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -298,7 +420,33 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		63EB4FED45A91F6C94D6FB8D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				997A79D27D61A49BF1D68815 /* CeremonyKeys.swift in Sources */,
+				0E7A6A016AF3497F0F3C324A /* CredentialProviderViewController.swift in Sources */,
+				1BC223875628A40CD99765EB /* PasskeyApprover.swift in Sources */,
+				825848A848D5E93B82BA431F /* PasskeyConsentView.swift in Sources */,
+				9AB8CE8342A923F4631DC8FD /* PasskeyEnvelope.swift in Sources */,
+				2113CB82987B0C3800F4797B /* PasskeyMailbox.swift in Sources */,
+				F3EB65780CB20C0FA15A1534 /* PasskeyPolicy.swift in Sources */,
+				CCE50700B89A739AAB51DFA8 /* PasskeyShared.swift in Sources */,
+				9F27A3BE0F1D96203C06F50A /* WebAuthnEncoding.swift in Sources */,
+				0905975ECE19575A4F666FA8 /* pubkycore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0BC52035A4B4A3E2AFE301F0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = PubkyRingCredentialProvider;
+			target = 60EB015F25EB410FB151BCB5 /* PubkyRingCredentialProvider */;
+			targetProxy = 5B88B10D2805CB0E953FE76B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
@@ -361,6 +509,48 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		15D2BE49D47CAC8ED3FEB4B4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = PubkyRingCredentialProvider/PubkyRingCredentialProvider.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = "$(RING_DEVELOPMENT_TEAM)";
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PubkyRingCredentialProvider/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework/ios-arm64";
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework/ios-arm64-simulator";
+				MARKETING_VERSION = 2.0.1;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lpubkycore",
+					"-framework",
+					SystemConfiguration,
+					"-framework",
+					Security,
+					"-lresolv",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(RING_PASSKEY_EXTENSION_ID)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				"SWIFT_INCLUDE_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework/ios-arm64/Headers";
+				"SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework/ios-arm64-simulator/Headers";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -532,6 +722,47 @@
 			};
 			name = Release;
 		};
+		DA67A53C9C7C339949437DA6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = PubkyRingCredentialProvider/PubkyRingCredentialProvider.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = "$(RING_DEVELOPMENT_TEAM)";
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PubkyRingCredentialProvider/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework/ios-arm64";
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework/ios-arm64-simulator";
+				MARKETING_VERSION = 2.0.1;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lpubkycore",
+					"-framework",
+					SystemConfiguration,
+					"-framework",
+					Security,
+					"-lresolv",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(RING_PASSKEY_EXTENSION_ID)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				"SWIFT_INCLUDE_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework/ios-arm64/Headers";
+				"SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework/ios-arm64-simulator/Headers";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -549,6 +780,15 @@
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,
 				83CBBA211A601CBA00E9B192 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9259691410D68E18907C6EF8 /* Build configuration list for PBXNativeTarget "PubkyRingCredentialProvider" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				15D2BE49D47CAC8ED3FEB4B4 /* Release */,
+				DA67A53C9C7C339949437DA6 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

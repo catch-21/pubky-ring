@@ -6,11 +6,19 @@
 /**
  * rpIds Ring registers iOS passkey identities for, so Ring appears in the
  * passkey sheet on these sites without a page-initiated enrolment
- * (decision 3). Add the Vercel demo host here, for example
- * 'pubky-app-git-cursor-ring-passkey-signin-d16a-<team>.vercel.app'.
- * Android needs no list: it offers Ring for every Pubky envelope.
+ * (decision 3). Extra hosts come from the PASSKEY_KNOWN_RP_IDS environment
+ * variable, as a comma-separated list, for example
+ * pubky-ring-demo.vercel.app. Android needs no list: it offers Ring for
+ * every Pubky envelope.
  */
-export const PASSKEY_KNOWN_RP_IDS: string[] = ['pubky.app', 'staging.pubky.app'];
+const extraPasskeyKnownRpIds = (process.env.PASSKEY_KNOWN_RP_IDS ?? '')
+	.split(',')
+	.map((rpId) => rpId.trim())
+	.filter((rpId) => rpId.length > 0);
+
+export const PASSKEY_KNOWN_RP_IDS: string[] = [
+	...new Set(['pubky.app', 'staging.pubky.app', ...extraPasskeyKnownRpIds]),
+];
 
 /** Mailbox relay used when https://{rpId}/.well-known/pubky-auth.json is missing (decision 6). */
 export const DEFAULT_MAILBOX_RELAY = 'https://httprelay.pubky.app/inbox';

@@ -16,7 +16,6 @@ PROJECT_PATH = File.join(ROOT, 'ios', 'pubkyring.xcodeproj')
 TARGET_NAME = 'PubkyRingCredentialProvider'
 EXTENSION_DIR = File.join(ROOT, 'ios', TARGET_NAME)
 PUBKY_IOS = File.join(ROOT, 'node_modules', '@synonymdev', 'react-native-pubky', 'ios')
-PUBKY_HEADERS = '$(SRCROOT)/../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework'
 DEPLOYMENT_TARGET = '17.0'
 
 abort "Run yarn install first: #{PUBKY_IOS} is missing" unless File.directory?(PUBKY_IOS)
@@ -44,11 +43,12 @@ end
 group.new_reference('Info.plist')
 group.new_reference("#{TARGET_NAME}.entitlements")
 
-# PubkyCore: the uniffi Swift bindings compile into the extension, and the static library links in.
+# PubkyCore: the uniffi Swift bindings compile into the extension. Link the static
+# library directly. Adding the xcframework copies its module map into the shared
+# build include directory and redefines pubkycoreFFI for the app target.
 core = group.new_group('PubkyCore')
 extension.add_file_references([core.new_reference(File.join(PUBKY_IOS, 'pubkycore.swift'))])
-xcframework = core.new_reference(File.join(PUBKY_IOS, 'Frameworks', 'PubkyCore.xcframework'))
-extension.frameworks_build_phase.add_file_reference(xcframework)
+pubky_core = '$(SRCROOT)/../node_modules/@synonymdev/react-native-pubky/ios/Frameworks/PubkyCore.xcframework'
 
 app_settings = app.build_configurations.first.build_settings
 extension.build_configurations.each do |config|
@@ -70,9 +70,11 @@ extension.build_configurations.each do |config|
   settings['LD_RUNPATH_SEARCH_PATHS'] = ['$(inherited)', '@executable_path/Frameworks', '@executable_path/../../Frameworks']
   # The xcframework ships arm64 slices only, like react-native-pubky's podspec.
   settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'x86_64'
-  settings['SWIFT_INCLUDE_PATHS[sdk=iphoneos*]'] = "#{PUBKY_HEADERS}/ios-arm64/Headers"
-  settings['SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]'] = "#{PUBKY_HEADERS}/ios-arm64-simulator/Headers"
-  settings['OTHER_LDFLAGS'] = ['$(inherited)', '-framework', 'SystemConfiguration', '-framework', 'Security', '-lresolv']
+  settings['LIBRARY_SEARCH_PATHS[sdk=iphoneos*]'] = "#{pubky_core}/ios-arm64"
+  settings['LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]'] = "#{pubky_core}/ios-arm64-simulator"
+  settings['SWIFT_INCLUDE_PATHS[sdk=iphoneos*]'] = "#{pubky_core}/ios-arm64/Headers"
+  settings['SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]'] = "#{pubky_core}/ios-arm64-simulator/Headers"
+  settings['OTHER_LDFLAGS'] = ['$(inherited)', '-lpubkycore', '-framework', 'SystemConfiguration', '-framework', 'Security', '-lresolv']
 end
 
 embed = app.copy_files_build_phases.find { |phase| phase.name == 'Embed Foundation Extensions' } ||

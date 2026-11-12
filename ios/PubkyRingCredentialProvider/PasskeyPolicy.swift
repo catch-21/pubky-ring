@@ -58,7 +58,7 @@ enum PasskeyPolicy {
     if route.hasSuffix("/") { route.removeLast() }
     guard route.allSatisfy({ $0 == "_" || ("a"..."z").contains($0) }) else { return nil }
     var params: [String: String] = [:]
-    for pair in url[url.index(after: query)...].split(separator: "&") {
+    for pair in url[query...].dropFirst().split(separator: "&") {
       let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
       let decode = { (raw: Substring) in raw.replacingOccurrences(of: "+", with: " ").removingPercentEncoding }
       guard let key = decode(parts[0]), let value = decode(parts.count > 1 ? parts[1] : "") else { return nil }
