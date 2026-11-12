@@ -207,5 +207,14 @@ for face in RingFacehash.FaceType.allCases {
   check("face \(face) eyes parse", facehash.faceType != face || eyes.allSatisfy { $0.count > 3 && $0.last == .close })
 }
 
+check("sheet drag begins downwards", RingSheetDrag.shouldBegin(translationX: 3, translationY: 12, scrollAtTop: true))
+check("sheet drag leaves the horizontal swipe alone", !RingSheetDrag.shouldBegin(translationX: 14, translationY: 10, scrollAtTop: true))
+check("sheet drag ignores upward drags", !RingSheetDrag.shouldBegin(translationX: 0, translationY: -12, scrollAtTop: true))
+check("sheet drag waits for the scroll top", !RingSheetDrag.shouldBegin(translationX: 0, translationY: 12, scrollAtTop: false))
+check("sheet drag dismisses past a quarter", RingSheetDrag.shouldDismiss(translationY: 201, velocityY: 0, height: 800))
+check("sheet drag springs back short of a quarter", !RingSheetDrag.shouldDismiss(translationY: 199, velocityY: 0, height: 800))
+check("sheet drag dismisses on a fling", RingSheetDrag.shouldDismiss(translationY: 40, velocityY: 1200, height: 800))
+check("sheet drag ignores an upward fling", !RingSheetDrag.shouldDismiss(translationY: 0, velocityY: 1200, height: 800))
+
 print(failures == 0 ? "all checks passed" : "\(failures) checks failed")
 exit(failures == 0 ? 0 : 1)

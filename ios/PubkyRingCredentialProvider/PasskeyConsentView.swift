@@ -167,10 +167,18 @@ struct PasskeyConsentView: View {
       model.showDetails ? .details : .basic
     let authorising = model.phase == .authorising
     return VStack(spacing: 0) {
-      // Fill the sheet when the content fits (so the hero centres), scroll when it does not.
-      ViewThatFits(in: .vertical) {
-        requestBody(view, identity: identity).frame(maxHeight: .infinity, alignment: .top)
-        ScrollView { requestBody(view, identity: identity) }.scrollBounceBehavior(.basedOnSize)
+      // The basic view never scrolls, so a downward drag anywhere on it closes the sheet. The
+      // details fill the sheet when they fit and scroll when they do not; the controller's drag
+      // then closes the sheet only from the top of the scroll.
+      Group {
+        if view == .basic {
+          requestBody(view, identity: identity).frame(maxHeight: .infinity, alignment: .top)
+        } else {
+          ViewThatFits(in: .vertical) {
+            requestBody(view, identity: identity).frame(maxHeight: .infinity, alignment: .top)
+            ScrollView { requestBody(view, identity: identity) }.scrollBounceBehavior(.basedOnSize)
+          }
+        }
       }
       .id(view)
       VStack(spacing: 24) {
@@ -183,7 +191,6 @@ struct PasskeyConsentView: View {
         RingSwipeToConfirm(
           text: t(authorising ? "auth.authorizing" : "auth.swipeToAuthorize", [:]), loading: authorising,
           onConfirm: onApprove)
-        RingButton(title: t("auth.deny", [:]), variant: .secondary, action: onDeny).disabled(authorising)
       }
       .padding(.bottom, 12)
     }
@@ -202,7 +209,7 @@ struct PasskeyConsentView: View {
         }
         .frame(maxWidth: 327)
         .aspectRatio(1, contentMode: .fit)
-        .frame(maxWidth: .infinity, minHeight: 200, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       case .details:
         details
       }

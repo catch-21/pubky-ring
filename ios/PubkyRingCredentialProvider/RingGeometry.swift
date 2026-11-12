@@ -448,3 +448,20 @@ struct RingFacehash {
     ),
   ]
 }
+
+/// Drag to dismiss for the extension's sheet, with the thresholds of the Android sheet
+/// (src/components/Sheet.tsx). The system sheet's own drag never sees touches inside the extension.
+enum RingSheetDrag {
+  static let dismissFraction = 0.25
+  static let dismissVelocity = 1000.0
+
+  /// Only a mostly downward drag closes the sheet, so the horizontal swipe to authorise keeps its
+  /// gesture, and only when the touched scroll view (if any) is already at its top.
+  static func shouldBegin(translationX: Double, translationY: Double, scrollAtTop: Bool) -> Bool {
+    scrollAtTop && translationY > 0 && translationY > abs(translationX)
+  }
+
+  static func shouldDismiss(translationY: Double, velocityY: Double, height: Double) -> Bool {
+    (velocityY > dismissVelocity && translationY > 0) || translationY > height * dismissFraction
+  }
+}

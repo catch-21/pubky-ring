@@ -26,6 +26,9 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
   private var isConfiguring = false
   private var hasFailed = false
   private var isFinished = false
+  private weak var sheetView: UIView?
+  /// The scroll view under the touch that started the drag, if any.
+  private weak var dragScrollView: UIScrollView?
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -44,6 +47,45 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     view.addSubview(host.view)
     host.didMove(toParent: self)
+    sheetView = host.view
+    let pan = UIPanGestureRecognizer(target: self, action: #selector(dragSheet(_:)))
+    pan.delegate = self
+    view.addGestureRecognizer(pan)
+  }
+
+  // MARK: Drag to dismiss
+
+  @objc private func dragSheet(_ pan: UIPanGestureRecognizer) {
+    guard let sheetView else { return }
+    let translationY = max(0, pan.translation(in: view).y)
+    switch pan.state {
+    case .changed:
+      if let scrollView = dragScrollView {
+        scrollView.contentOffset.y = -scrollView.adjustedContentInset.top
+      }
+      sheetView.transform = CGAffineTransform(translationX: 0, y: translationY)
+    case .ended, .cancelled, .failed:
+      let height = view.bounds.height
+      let dismiss =
+        pan.state == .ended
+        && RingSheetDrag.shouldDismiss(
+          translationY: translationY, velocityY: pan.velocity(in: view).y, height: height)
+      if dismiss {
+        UIView.animate(
+          withDuration: 0.2, animations: { sheetView.transform = CGAffineTransform(translationX: 0, y: height) }
+        ) { [weak self] _ in self?.deny() }
+      } else {
+        UIView.animate(
+          withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0,
+          options: [.allowUserInteraction], animations: { sheetView.transform = .identity })
+      }
+    default:
+      break
+    }
+  }
+
+  private static func isAtTop(_ scrollView: UIScrollView) -> Bool {
+    scrollView.contentOffset.y <= -scrollView.adjustedContentInset.top + 0.5
   }
 
   // MARK: Assertion
@@ -170,6 +212,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
           userHandle: Data(pending.identity.pubky.utf8), relyingParty: pending.rpId, signature: signature,
           clientDataHash: pending.clientDataHash, authenticatorData: authenticatorData, credentialID: credentialId)
         // The website signs in as soon as it has the grant, so hand the assertion back at once.
+        guard !isFinished else { return }
         isFinished = true
         extensionContext.completeAssertionRequest(using: credential) { _ in }
       } catch PasskeyApprover.Failure.deviceAuthFailed {
@@ -240,5 +283,30 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
   override func prepareInterfaceForExtensionConfiguration() {
     isConfiguring = true
     model.phase = .info
+  }
+}
+
+extension CredentialProviderViewController: UIGestureRecognizerDelegate {
+  func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+    var candidate = touch.view
+    while let current = candidate, !(current is UIScrollView) { candidate = current.superview }
+    dragScrollView = candidate as? UIScrollView
+    return true
+  }
+
+  func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    guard let pan = gestureRecognizer as? UIPanGestureRecognizer, !isFinished, model.phase != .authorising
+    else { return false }
+    let translation = pan.translation(in: view)
+    return RingSheetDrag.shouldBegin(
+      translationX: translation.x, translationY: translation.y,
+      scrollAtTop: dragScrollView.map(Self.isAtTop) ?? true)
+  }
+
+  /// The scroll view keeps its own pan; while the sheet is being dragged it is pinned to its top.
+  func gestureRecognizer(
+    _ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+  ) -> Bool {
+    other === dragScrollView?.panGestureRecognizer
   }
 }
