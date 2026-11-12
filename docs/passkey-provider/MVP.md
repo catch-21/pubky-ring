@@ -6,8 +6,8 @@ This is the companion to [PLAN.md](PLAN.md). It records what was built, how far 
 
 | Part | State |
 |---|---|
-| Shared protocol (envelope, `cid` policy, iOS mailbox, credential IDs) | Built in TypeScript (Ring and pubky-app), Kotlin and Swift. All three agree with the shared vectors in `__tests__/fixtures/passkey/vectors.json`. |
-| Android provider | Built and run on an emulator. Ring appears in Chrome's passkey sheet, shows the consent screen, refuses a wrong `cid`, and returns `NotAllowedError` on deny or back. Final approval through the relay has not been run (see [What has not been verified](#what-has-not-been-verified)). |
+| Shared protocol (envelope, `cid` policy, iOS mailbox, refusal report, credential IDs) | Built in TypeScript (Ring and pubky-app), Kotlin and Swift. All three agree with the shared vectors in `__tests__/fixtures/passkey/vectors.json`. |
+| Android provider | Built and run on an emulator. Ring appears in Chrome's passkey sheet, shows the consent screen, refuses a wrong `cid`, and returns `NotAllowedError` on cancel. That run predates drag to dismiss and the refusal report. Final approval through the relay has not been run (see [What has not been verified](#what-has-not-been-verified)). |
 | iOS provider extension | Source and project script written. Not compiled against the iOS SDK, because there is no Mac here. The protocol code compiles and passes the vectors on Linux. |
 | pubky-app sign-in | Built on the fork branch with SDK 0.18.0. The mobile Ring button runs the passkey flow, and the deep link remains the fallback. The pubky-app unit tests pass. Not yet pushed to the fork: see [pubky-app branch](#pubky-app-branch). |
 | Vercel demo | Not deployed. The steps are in [Demo on Vercel Hobby](#demo-on-vercel-hobby). |
@@ -67,22 +67,55 @@ Both platforms show the same sheet as ConfirmAuth's Authorize sheet, always in t
   - the permission paths, or the identity check when no paths are requested;
   - the encryption switch, when encrypted paths are requested;
   - the relay that the request actually uses.
-- **Approval:** swipe to authorise. Ring then shows its success state for 400 ms before returning the assertion.
-- **Deny** is kept on both platforms:
-  - Android: the sheet cannot be swiped down. Back and a tap outside the sheet also deny.
-  - iOS: Apple asks providers to offer a cancel control in their own view, and swiping the system sheet down could not be checked without a device. The sheet also denies itself when its 60-second timer runs out, as ConfirmAuth does.
-- **Unverified sites never reach the sheet:**
-  - On Android, a browser that is not on the privileged allowlist is refused at once.
-  - An origin host that differs from the rpId is refused as `origin_mismatch` (Android only, because iOS does not pass the origin to providers).
-  - A `cid` that differs from the rpId is refused as `client_id_mismatch`.
+- **Approval:** swipe to authorise. The assertion goes back as soon as the grant is posted, with no success state, because the page signs in straight away. ConfirmAuth keeps its success state.
+- **Cancel:** there is no Deny button. Dragging the sheet down cancels with the platform's cancellation error (`NotAllowedError` on the page):
+  - The sheet follows the finger and closes past a quarter of its height or on a fling, otherwise it springs back.
+  - The basic view never scrolls, so a drag anywhere on it works. The details view scrolls when it has to, and closes only once it is scrolled to the top.
+  - Only a mostly downward drag counts, so the horizontal swipe to authorise does not conflict with it.
+  - Android: `SheetCard`'s `onDragDismiss` pan (`Sheet.tsx`), which the details' gesture-handler `ScrollView` runs alongside. Back and a tap outside the sheet also cancel.
+  - iOS: the system sheet's own drag never sees touches inside the extension, so the view controller adds a `UIPanGestureRecognizer`. Scroll views keep their pan and are pinned to their top while the sheet moves. VoiceOver's escape gesture also cancels.
+  - Both cancel when the 60-second timer runs out, as ConfirmAuth does. Cancelling is blocked on iOS while approval is in progress, because the approval cannot be aborted there.
+- **Refusals** end the request at once, with no error screen. See [Refusals](#refusals).
 - **Pubky picker:**
   - Android lists one passkey entry per pubky, so no picker is needed.
-  - On iOS, the identity route arrives with the pubky that iOS chose. Only the list route (`prepareCredentialList`) with more than one pubky shows a picker, with a Cancel button.
+  - On iOS, the identity route arrives with the pubky that iOS chose. Only the list route (`prepareCredentialList`) with more than one pubky shows a picker, which keeps its Cancel button.
 
 The iOS sheet is SwiftUI: `RingTheme.swift` and `RingComponents.swift` port Ring's colours, text styles, cards, buttons, identity pill, avatar, timer and swipe control.
 
 - The extension bundles Inter Tight (Regular, Medium, SemiBold and Bold), `shield.png` and Ring's `en.json` and `es.json`. It picks the language as the app does (English or Spanish, otherwise English).
 - The snapshot now also carries each pubky's display name and the "always show details" setting.
+
+## Refusals
+
+Ring refuses, among others: a browser that is not on Google's privileged allowlist (`browser_not_allowed`, Android), an origin host other than the rpId (`origin_mismatch`, Android), a `cid` other than the rpId (`client_id_mismatch`), an expired, too long-lived, replayed or unsupported request, an unknown pubky, and a failed approval after the swipe (`approval_failed`, or `secret_unavailable` on iOS).
+
+What the page sees, from Chromium's `CredManHelper` and WebKit's `WebAuthenticatorCoordinatorProxy`:
+
+| Ring ends the request with | Page sees |
+|---|---|
+| Android `GetCredentialCancellationException` (user cancel) | `NotAllowedError` |
+| Android `GetCredentialUnknownException` (refusal) | `NotReadableError`, "An unknown error occurred while talking to the credential manager." |
+| iOS `ASExtensionError.userCanceled` or `.failed` | `NotAllowedError`, with no message |
+
+The provider's message never reaches the page. `GetCredentialNoCredentialException` is avoided, because Chrome then falls back to Google Password Manager's sheet.
+
+So before refusing, Ring reports the reason through the request's own relay (`src/passkey/report.ts`, `PasskeyReport.swift`):
+
+- Channel: `base64url(SHA-256(utf8("pubky-ring-webauthn-report-v1/channel") || nonce))`, with the envelope's 16-byte nonce.
+- Ring POSTs `{"v":1,"reason":"<code>"}` (`application/json`) to `<relay without trailing slashes>/<channel>`, waits at most 3 seconds, then ends the request. Vectors are under `report` in `vectors.json`.
+- Only to an `https` relay with no query, named by a readable envelope. Requests with no envelope (`malformed`, `not_pubky_request`, `no_pubkys`, iOS `request_not_found` and `ios_too_old`) are refused without a report.
+- The grant, the assertion and the envelope are unchanged. Any app can make Ring send this fixed body to the relay its envelope names, which Ring accepts as low risk.
+
+### What pubky-app needs to change
+
+Not applied, since pubky-app is out of scope here:
+
+1. `src/libs/passkey/`: add `reportChannel(nonce)` as above, next to the mailbox helpers, with a test against `vectors.report`. Add `readRefusalReport(envelope, signal)`: decode the envelope (`attempt.request.envelope`), take `relay` from its link (today `getDefaultHttpRelay()`), GET `${relay}/${reportChannel(nonce)}` with a timeout of about 2 seconds, and on a 200 with `v === 1` DELETE the channel and return `reason`. Return null otherwise.
+2. `usePasskeyAuth.tsx`, at the top of `runCeremony`'s `catch`: when the error is a `PasskeyCeremonyError` with reason `cancelled` or `failed`, await `readRefusalReport` first. This must run before the iOS quick-`NotAllowedError` check (`setNeedsTap`), because a refusal can arrive within 1.5 seconds.
+3. With a report:
+   - `browser_not_allowed`: settle as `passkey-failed`, so the deep-link hint shows, and say that the browser is not supported.
+   - Anything else: show a message for the reason, then settle as `failed`. For example, `client_id_mismatch` or `origin_mismatch` means "this site is not the one named in the request"; `expired` or `replayed` means "try again"; `unknown_pubky` means "that pubky is not in Ring"; `approval_failed` or `secret_unavailable` means "open Ring and try again". Ring's `passkey.errors.*` strings can be reused.
+4. Without a report, map `NotReadableError` to "Pubky Ring refused the request" (Android). Keep `NotAllowedError` as a cancel, as today.
 
 ## Files
 
@@ -90,12 +123,12 @@ The iOS sheet is SwiftUI: `RingTheme.swift` and `RingComponents.swift` port Ring
 
 | Area | Files |
 |---|---|
-| Shared JS | `src/passkey/`: `envelope.ts`, `policy.ts` (`CLIENT_ID_POLICY`), `request.ts`, `nonceCache.ts`, `snapshot.ts`, `usePasskeySnapshotSync.ts`, `native.ts`, `config.ts`, `PasskeyConsentRoot.tsx`. Also `src/screens/PasskeyConsent.tsx`, `src/components/AuthRequestContent.tsx` and `Sheet.tsx` (shared with ConfirmAuth), `src/components/PasskeySettingsSection.tsx`, `index.js` (`PubkyPasskeyConsent`), and i18n `passkey.*` |
+| Shared JS | `src/passkey/`: `envelope.ts`, `policy.ts` (`CLIENT_ID_POLICY`), `request.ts`, `report.ts`, `nonceCache.ts`, `snapshot.ts`, `usePasskeySnapshotSync.ts`, `native.ts`, `config.ts`, `PasskeyConsentRoot.tsx`. Also `src/screens/PasskeyConsent.tsx`, `src/components/AuthRequestContent.tsx` and `Sheet.tsx` (shared with ConfirmAuth), `src/components/PasskeySettingsSection.tsx`, `index.js` (`PubkyPasskeyConsent`), and i18n `passkey.*` |
 | Android | `android/app/src/main/java/com/pubkyring/passkey/`: `RingCredentialProviderService.kt`, `PasskeyConsentActivity.kt`, `PubkyPasskeyModule.kt`, `PubkyWebAuthn.kt`, `CeremonyKeyStore.kt`, `PasskeySnapshotStore.kt`. Also `AndroidManifest.xml`, `res/xml/pubky_credential_provider.xml`, `res/values*/bools.xml`, `assets/passkey_privileged_browsers.json`, and `androidx.credentials` 1.5.0 |
-| iOS extension | `ios/PubkyRingCredentialProvider/`: `CredentialProviderViewController.swift`, `PasskeyConsentView.swift`, `PasskeyApprover.swift`, `PasskeyEnvelope.swift`, `PasskeyPolicy.swift`, `PasskeyMailbox.swift`, `PasskeyShared.swift`, `CeremonyKeys.swift`, `WebAuthnEncoding.swift`, the sheet's `RingTheme.swift`, `RingComponents.swift`, `RingGeometry.swift`, `RingAuthRequest.swift` and `RingStrings.swift`, `Info.plist`, entitlements |
+| iOS extension | `ios/PubkyRingCredentialProvider/`: `CredentialProviderViewController.swift`, `PasskeyConsentView.swift`, `PasskeyApprover.swift`, `PasskeyEnvelope.swift`, `PasskeyPolicy.swift`, `PasskeyMailbox.swift`, `PasskeyReport.swift`, `PasskeyShared.swift`, `CeremonyKeys.swift`, `WebAuthnEncoding.swift`, the sheet's `RingTheme.swift`, `RingComponents.swift`, `RingGeometry.swift`, `RingAuthRequest.swift` and `RingStrings.swift`, `Info.plist`, entitlements |
 | iOS app | `ios/pubkyring/PubkyPasskey.m` (snapshot, identity store, provider status), `SharedPubky.m`, `Info.plist`, `pubkyring.entitlements`, `ios/Config/Signing.xcconfig`, `project.pbxproj` |
 | Scripts | `scripts/passkey/add-ios-credential-provider.rb`, `generate-vectors.js`, `protocol-reference.js`, `swift-vector-check/`, `emulator-check.html` |
-| Tests | `__tests__/passkeyProtocol.test.ts`, `__tests__/fixtures/passkey/vectors.json` |
+| Tests | `__tests__/passkeyProtocol.test.ts`, `passkeyReport.test.ts`, `PasskeyConsent.test.tsx`, `__tests__/fixtures/passkey/vectors.json` |
 
 `passkey_privileged_browsers.json` is a copy of Google's privileged browser allowlist (<https://www.gstatic.com/gpm-passkeys-privileged-apps/apps.json>). Ring uses it to trust the origin a browser reports. Refresh it from that URL from time to time.
 
@@ -144,8 +177,8 @@ This reproduces the checks behind the screenshots in the pull request.
    - In Chrome on the emulator, open `http://localhost:8080/emulator-check.html`. `localhost` is a secure context, so WebAuthn works over plain HTTP here.
 6. Tap the two buttons:
    - **"Sign in (cid = this host)"** should show Ring in the sheet, then the consent screen.
-   - **"Sign in (cid = evil.example)"** should show Ring's refusal screen.
-   - Deny, back and Close should each print `NotAllowedError` on the page.
+   - **"Sign in (cid = evil.example)"** should close Ring at once and print `NotReadableError` on the page.
+   - Dragging the sheet down, back and a tap outside it should each print `NotAllowedError`.
 
 Ring lists only identities that can authorise. To see the consent screen on the emulator without a signed-up account, the identity was marked as signed up with a temporary local change, which has been reverted. Approving that identity then fails with "Homeserver not found", as expected for a key with no homeserver record.
 
@@ -260,7 +293,7 @@ A staging deploy (`PUBKY_RUNTIME_ENV=staging`) rejects keys whose PKARR record d
 ## What was verified
 
 - **Ring:**
-  - Jest: 49 suites and 510 tests pass, including 26 passkey protocol tests and 13 consent sheet tests.
+  - Jest: 50 suites and 518 tests pass, including 26 passkey protocol tests, 5 refusal report tests and 16 consent sheet tests (drag to dismiss and refusals included).
   - `tsc --noEmit` passes.
   - ESLint reports no errors; its two warnings are in untouched upstream files.
 - **pubky-app:**
@@ -274,21 +307,23 @@ A staging deploy (`PUBKY_RUNTIME_ENV=staging`) rejects keys whose PKARR record d
   - Ring appears in the passkey sheet.
   - Consent shows the browser-verified site and the requested permissions.
   - A wrong `cid` is refused.
-  - Deny, back and Close return `NotAllowedError` to the page.
+  - Deny, back and Close returned `NotAllowedError` to the page. This was before Deny was removed and refusals were reported.
 - **iOS:**
   - All extension sources parse with Swift 6.0.3.
   - The envelope, policy, mailbox, credential ID and WebAuthn encoding code compiles and passes the vector checks on Linux.
-  - The sheet's strings, summaries, icon paths and avatar geometry pass the same harness, which runs 95 checks in all. The SwiftUI sheet and the view controller type-check on Linux against hand-written SwiftUI and UIKit stubs. That catches mistakes inside Ring's code, but not wrong guesses about Apple's APIs.
+  - The sheet's strings, summaries, icon paths and avatar geometry pass the same harness, which runs 109 checks in all, including the refusal report and the drag thresholds. The SwiftUI sheet and the view controller type-check on Linux against hand-written SwiftUI and UIKit stubs. That catches mistakes inside Ring's code, but not wrong guesses about Apple's APIs.
   - The project script runs cleanly and idempotently with `xcodeproj` 1.25.1 and 1.28.1. With the sheet's resources added, it was rerun with 1.28.1, and the committed project opens with the same gem.
 
 ## What has not been verified
 
+- **Android drag to dismiss and refusal reports** on a device or emulator, and the Kotlin changes, which were not compiled here.
 - **Android approval end to end:** approve, relay post, assertion, then pubky-app adopting the session. This needs a signed-up identity on the homeserver the web app uses, and the emulator had none.
 - **iOS on a device:**
   - building the extension;
   - its appearance in the passkey sheet;
   - how the Ring sheet looks and lays out, including whether iOS adds its own grabber above Ring's handle;
-  - whether swiping the system sheet down cancels the request;
+  - drag to dismiss inside the extension, and a vertical drag that starts on the swipe handle (SwiftUI's drag may claim it first);
+  - the refusal report reaching the relay before the extension closes;
   - PRF inputs reaching the provider;
   - whether iOS hands providers the raw PRF input or the hashed salt. Ring tries both readings.
   - the undocumented iOS 17 `allowCredentials` route;
