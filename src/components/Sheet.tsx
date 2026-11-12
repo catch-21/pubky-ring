@@ -44,41 +44,43 @@ interface SheetScreenProps {
 
 interface SheetProps extends SheetFrameProps, SheetScreenProps {}
 
+interface SheetCardProps extends SheetFrameProps {
+	onBackdropPress: () => void;
+}
+
+type SheetLayoutProps = Omit<SheetScreenProps, 'id' | 'showBackButton'> & {
+	/** Prefix for the back button and title test IDs. */
+	id: string;
+};
+
 const gradientColors: Record<Exclude<GradientType, 'none'>, string[]> = {
 	brand: ['#0085FF', '#000000'],
 	danger: ['#E95164', '#000000'],
 };
 
-export const SheetFrame = ({ children }: SheetFrameProps): ReactElement => {
+/** The bottom card Android uses when it cannot present a native form sheet. */
+export const SheetCard = ({ children, onBackdropPress }: SheetCardProps): ReactElement => {
 	const { height: windowHeight } = useWindowDimensions();
 	const insets = useSafeAreaInsets();
+	const cardHeight = windowHeight - insets.top - HEADER_HEIGHT;
 
+	return (
+		<View style={styles.androidRoot}>
+			<Pressable style={styles.backdrop} testID="SheetBackdrop" onPress={onBackdropPress} />
+			<View style={[styles.androidCard, { height: cardHeight }]}>{children}</View>
+		</View>
+	);
+};
+
+export const SheetFrame = ({ children }: SheetFrameProps): ReactElement => {
 	if (shouldUseAndroidSheetFallback()) {
-		const cardHeight = windowHeight - insets.top - HEADER_HEIGHT;
-		return (
-			<View style={styles.androidRoot}>
-				<Pressable style={styles.backdrop} onPress={hideActiveSheet} />
-				<View style={[styles.androidCard, { height: cardHeight }]}>{children}</View>
-			</View>
-		);
+		return <SheetCard onBackdropPress={hideActiveSheet}>{children}</SheetCard>;
 	}
 
 	return <View style={styles.frame}>{children}</View>;
 };
 
-export const SheetScreen = ({
-	id,
-	title: titleText,
-	children,
-	titleTestID,
-	gradientType = 'none',
-	contentStyle,
-	scrollable = false,
-	showBottomSafeAreaInset = true,
-	headerRight,
-	showBackButton = true,
-	onBackPress,
-}: SheetScreenProps): ReactElement => {
+export const SheetScreen = ({ showBackButton = true, onBackPress, ...props }: SheetScreenProps): ReactElement => {
 	const navigation = useNavigation();
 	const isFocused = useIsFocused();
 	const hasStackScreenToGoBackTo = useNavigationState(state => {
@@ -88,6 +90,22 @@ export const SheetScreen = ({
 	const backPressHandler = onBackPress ?? (hasStackScreenToGoBackTo ? navigation.goBack : undefined);
 	const visibleBackPressHandler = showBackButton && isFocused ? backPressHandler : undefined;
 
+	return <SheetLayout {...props} onBackPress={visibleBackPressHandler} />;
+};
+
+/** Sheet chrome without navigation: the back button shows only when onBackPress is set. */
+export const SheetLayout = ({
+	id,
+	title: titleText,
+	children,
+	titleTestID,
+	gradientType = 'none',
+	contentStyle,
+	scrollable = false,
+	showBottomSafeAreaInset = true,
+	headerRight,
+	onBackPress: visibleBackPressHandler,
+}: SheetLayoutProps): ReactElement => {
 	const titleHeader = (
 		<View style={styles.titleContainer}>
 			{visibleBackPressHandler ? (
