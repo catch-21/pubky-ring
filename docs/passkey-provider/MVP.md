@@ -57,15 +57,42 @@ The six commits are:
 4. Ring shows consent (skipped when Auto Auth is on, as with QR scanning). It then signs the grant approval, posts it to the relay, and returns a passkey assertion whose `userHandle` is the pubky.
 5. The page receives the session from the relay. It adopts the session only if the session's pubky equals the assertion's `userHandle`.
 
+## Consent sheet
+
+Both platforms show the same sheet as ConfirmAuth's Authorize sheet, always in the dark theme:
+
+- **Basic view:** the request summary and the identity pill. A Show Details button opens the rest, unless the user turned on "always show details" in Ring.
+- **Details view:**
+  - a Requesting Site card with the rpId that the browser (Android) or iOS verified;
+  - the permission paths, or the identity check when no paths are requested;
+  - the encryption switch, when encrypted paths are requested;
+  - the relay that the request actually uses.
+- **Approval:** swipe to authorise. Ring then shows its success state for 400 ms before returning the assertion.
+- **Deny** is kept on both platforms:
+  - Android: the sheet cannot be swiped down. Back and a tap outside the sheet also deny.
+  - iOS: Apple asks providers to offer a cancel control in their own view, and swiping the system sheet down could not be checked without a device. The sheet also denies itself when its 60-second timer runs out, as ConfirmAuth does.
+- **Unverified sites never reach the sheet:**
+  - On Android, a browser that is not on the privileged allowlist is refused at once.
+  - An origin host that differs from the rpId is refused as `origin_mismatch` (Android only, because iOS does not pass the origin to providers).
+  - A `cid` that differs from the rpId is refused as `client_id_mismatch`.
+- **Pubky picker:**
+  - Android lists one passkey entry per pubky, so no picker is needed.
+  - On iOS, the identity route arrives with the pubky that iOS chose. Only the list route (`prepareCredentialList`) with more than one pubky shows a picker, with a Cancel button.
+
+The iOS sheet is SwiftUI: `RingTheme.swift` and `RingComponents.swift` port Ring's colours, text styles, cards, buttons, identity pill, avatar, timer and swipe control.
+
+- The extension bundles Inter Tight (Regular, Medium, SemiBold and Bold), `shield.png` and Ring's `en.json` and `es.json`. It picks the language as the app does (English or Spanish, otherwise English).
+- The snapshot now also carries each pubky's display name and the "always show details" setting.
+
 ## Files
 
 ### Ring
 
 | Area | Files |
 |---|---|
-| Shared JS | `src/passkey/`: `envelope.ts`, `policy.ts` (`CLIENT_ID_POLICY`), `request.ts`, `nonceCache.ts`, `snapshot.ts`, `usePasskeySnapshotSync.ts`, `native.ts`, `config.ts`, `PasskeyConsentRoot.tsx`. Also `src/screens/PasskeyConsent.tsx`, `src/components/PasskeySettingsSection.tsx`, `index.js` (`PubkyPasskeyConsent`), and i18n `passkey.*` |
+| Shared JS | `src/passkey/`: `envelope.ts`, `policy.ts` (`CLIENT_ID_POLICY`), `request.ts`, `nonceCache.ts`, `snapshot.ts`, `usePasskeySnapshotSync.ts`, `native.ts`, `config.ts`, `PasskeyConsentRoot.tsx`. Also `src/screens/PasskeyConsent.tsx`, `src/components/AuthRequestContent.tsx` and `Sheet.tsx` (shared with ConfirmAuth), `src/components/PasskeySettingsSection.tsx`, `index.js` (`PubkyPasskeyConsent`), and i18n `passkey.*` |
 | Android | `android/app/src/main/java/com/pubkyring/passkey/`: `RingCredentialProviderService.kt`, `PasskeyConsentActivity.kt`, `PubkyPasskeyModule.kt`, `PubkyWebAuthn.kt`, `CeremonyKeyStore.kt`, `PasskeySnapshotStore.kt`. Also `AndroidManifest.xml`, `res/xml/pubky_credential_provider.xml`, `res/values*/bools.xml`, `assets/passkey_privileged_browsers.json`, and `androidx.credentials` 1.5.0 |
-| iOS extension | `ios/PubkyRingCredentialProvider/`: `CredentialProviderViewController.swift`, `PasskeyConsentView.swift`, `PasskeyApprover.swift`, `PasskeyEnvelope.swift`, `PasskeyPolicy.swift`, `PasskeyMailbox.swift`, `PasskeyShared.swift`, `CeremonyKeys.swift`, `WebAuthnEncoding.swift`, `Info.plist`, entitlements |
+| iOS extension | `ios/PubkyRingCredentialProvider/`: `CredentialProviderViewController.swift`, `PasskeyConsentView.swift`, `PasskeyApprover.swift`, `PasskeyEnvelope.swift`, `PasskeyPolicy.swift`, `PasskeyMailbox.swift`, `PasskeyShared.swift`, `CeremonyKeys.swift`, `WebAuthnEncoding.swift`, the sheet's `RingTheme.swift`, `RingComponents.swift`, `RingGeometry.swift`, `RingAuthRequest.swift` and `RingStrings.swift`, `Info.plist`, entitlements |
 | iOS app | `ios/pubkyring/PubkyPasskey.m` (snapshot, identity store, provider status), `SharedPubky.m`, `Info.plist`, `pubkyring.entitlements`, `ios/Config/Signing.xcconfig`, `project.pbxproj` |
 | Scripts | `scripts/passkey/add-ios-credential-provider.rb`, `generate-vectors.js`, `protocol-reference.js`, `swift-vector-check/`, `emulator-check.html` |
 | Tests | `__tests__/passkeyProtocol.test.ts`, `__tests__/fixtures/passkey/vectors.json` |
@@ -100,7 +127,7 @@ Steps:
    - Recent Chrome uses Android's Credential Manager for passkeys by default.
    - On older Chrome, if only Google Password Manager appears, enable `chrome://flags/#web-authentication-android-credential-management` and restart Chrome. This was needed on Chrome 124 in the emulator.
    - Chrome's "Autofill services" setting may also need "Autofill using another service" (not checked).
-5. **Sign in.** Open the demo in Chrome and tap the Pubky Ring button. Choose Pubky Ring in the sheet, check the site and permissions, and swipe to authorise.
+5. **Sign in.** Open the demo in Chrome and tap the Pubky Ring button. Choose Pubky Ring in the sheet. Tap Show Details to check the site, permissions and relay, then swipe to authorise.
 6. **Debugging.** `adb logcat -s PubkyPasskey` logs each Pubky request the provider sees. `adb logcat ReactNativeJS:V` shows the consent screen's JS logs.
 
 ### Emulator check
@@ -176,7 +203,7 @@ Steps:
 Notes:
 
 - Identities adopted from Bitkit live in the `pubky.shared` keychain group under Synonym's team, so a build signed with another team cannot read them. Use identities created in Ring.
-- The extension's protocol code can be checked without Xcode: `scripts/passkey/swift-vector-check/run.sh` (Swift 5.9 or later; it uses swift-crypto in place of CryptoKit).
+- The extension's protocol code can be checked without Xcode: `scripts/passkey/swift-vector-check/run.sh` (Swift 5.9 or later; it uses swift-crypto in place of CryptoKit). It also checks the sheet's strings, summaries, icon paths and avatar geometry.
 
 ## Demo on Vercel Hobby
 
@@ -233,7 +260,7 @@ A staging deploy (`PUBKY_RUNTIME_ENV=staging`) rejects keys whose PKARR record d
 ## What was verified
 
 - **Ring:**
-  - Jest: 48 suites and 496 tests pass, including 25 passkey protocol tests.
+  - Jest: 49 suites and 510 tests pass, including 26 passkey protocol tests and 13 consent sheet tests.
   - `tsc --noEmit` passes.
   - ESLint reports no errors; its two warnings are in untouched upstream files.
 - **pubky-app:**
@@ -250,8 +277,9 @@ A staging deploy (`PUBKY_RUNTIME_ENV=staging`) rejects keys whose PKARR record d
   - Deny, back and Close return `NotAllowedError` to the page.
 - **iOS:**
   - All extension sources parse with Swift 6.0.3.
-  - The envelope, policy, mailbox, credential ID and WebAuthn encoding code compiles and passes 29 vector checks on Linux.
-  - The project script runs cleanly and idempotently with `xcodeproj` 1.25.1 and 1.28.1.
+  - The envelope, policy, mailbox, credential ID and WebAuthn encoding code compiles and passes the vector checks on Linux.
+  - The sheet's strings, summaries, icon paths and avatar geometry pass the same harness, which runs 95 checks in all. The SwiftUI sheet and the view controller type-check on Linux against hand-written SwiftUI and UIKit stubs. That catches mistakes inside Ring's code, but not wrong guesses about Apple's APIs.
+  - The project script runs cleanly and idempotently with `xcodeproj` 1.25.1 and 1.28.1. With the sheet's resources added, it was rerun with 1.28.1, and the committed project opens with the same gem.
 
 ## What has not been verified
 
@@ -259,6 +287,8 @@ A staging deploy (`PUBKY_RUNTIME_ENV=staging`) rejects keys whose PKARR record d
 - **iOS on a device:**
   - building the extension;
   - its appearance in the passkey sheet;
+  - how the Ring sheet looks and lays out, including whether iOS adds its own grabber above Ring's handle;
+  - whether swiping the system sheet down cancels the request;
   - PRF inputs reaching the provider;
   - whether iOS hands providers the raw PRF input or the hashed salt. Ring tries both readings.
   - the undocumented iOS 17 `allowCredentials` route;
