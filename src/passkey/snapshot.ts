@@ -7,6 +7,8 @@ export interface PasskeySnapshotIdentity {
 	/** Redux store key, used to look up the secret. */
 	storeKey: string;
 	name: string;
+	/** The name Ring shows for this pubky (getPubkyName), so the iOS consent sheet matches the app. */
+	displayName?: string;
 	/** Set for pubkys imported from another app (Bitkit), whose secret Ring fetches from that app. */
 	sourceApp?: string;
 }
@@ -19,6 +21,8 @@ export interface PasskeySnapshot {
 	version: number;
 	autoAuth: boolean;
 	requireDeviceAuth: boolean;
+	/** Settings > Always show authorization details: the consent sheet opens on its details view. */
+	alwaysShowAuthDetails?: boolean;
 	knownRpIds: string[];
 	identities: PasskeySnapshotIdentity[];
 }
@@ -29,22 +33,29 @@ export const buildPasskeySnapshot = ({
 	pubkys,
 	autoAuth,
 	requireDeviceAuth,
+	alwaysShowAuthDetails = false,
+	displayNames = {},
 	knownRpIds = PASSKEY_KNOWN_RP_IDS,
 }: {
 	pubkys: Record<string, Pubky>;
 	autoAuth: boolean;
 	requireDeviceAuth: boolean;
+	alwaysShowAuthDetails?: boolean;
+	/** Display names by store key. */
+	displayNames?: Record<string, string>;
 	knownRpIds?: string[];
 }): PasskeySnapshot => ({
 	version: PASSKEY_SNAPSHOT_VERSION,
 	autoAuth,
 	requireDeviceAuth,
+	alwaysShowAuthDetails,
 	knownRpIds,
 	identities: Object.entries(pubkys)
 		.map(([storeKey, pubky]) => ({
 			pubky: toZ32(storeKey),
 			storeKey,
 			name: pubky.name ?? '',
+			...(displayNames[storeKey] ? { displayName: displayNames[storeKey] } : {}),
 			...(pubky.sourceApp ? { sourceApp: pubky.sourceApp } : {}),
 		}))
 		.sort((a, b) => a.pubky.localeCompare(b.pubky)),

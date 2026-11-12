@@ -211,11 +211,27 @@ describe('buildPasskeySnapshot', () => {
 			version: 1,
 			autoAuth: false,
 			requireDeviceAuth: true,
+			alwaysShowAuthDetails: false,
 			knownRpIds: ['pubky.app'],
 			identities: [
 				{ pubky: 'aaaa', storeKey: 'aaaa', name: 'Alice', sourceApp: 'to.bitkit' },
 				{ pubky: 'bbbb', storeKey: 'pk:bbbb', name: 'Bob' },
 			],
 		});
+	});
+
+	it('carries the names and details preference the iOS consent sheet shows', () => {
+		const snapshot = buildPasskeySnapshot({
+			pubkys: { 'pk:bbbb': { name: '' } as never },
+			autoAuth: false,
+			requireDeviceAuth: false,
+			alwaysShowAuthDetails: true,
+			displayNames: { 'pk:bbbb': 'pubky #2' },
+			knownRpIds: [],
+		});
+		expect(snapshot.alwaysShowAuthDetails).toBe(true);
+		expect(snapshot.identities).toEqual([
+			{ pubky: 'bbbb', storeKey: 'pk:bbbb', name: '', displayName: 'pubky #2' },
+		]);
 	});
 });
